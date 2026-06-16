@@ -98,6 +98,11 @@ export default function CalfRegistration() {
     e.target.value = ''
   }
 
+  async function deleteCalf(id) {
+    await supabase.from('calves').delete().eq('id', id)
+    loadCalves()
+  }
+
   function update(field, value) { setForm((f) => ({ ...f, [field]: value })) }
 
   const idYear = form.birth_date ? form.birth_date.slice(2, 4) : '--'
@@ -173,10 +178,6 @@ export default function CalfRegistration() {
 
 
 
-  async function markDeceased(id, value) {
-    await supabase.from('calves').update({ deceased: value }).eq('id', id)
-    loadCalves()
-  }
 
 
   const searchLower = search.toLowerCase()
@@ -315,7 +316,7 @@ export default function CalfRegistration() {
           {displayed.map((c) =>
             editingId === c.id
               ? <EditCalfCard key={c.id} calf={c} editForm={editForm} setEditForm={setEditForm} onSave={() => saveEdit(c)} onCancel={() => setEditingId(null)} />
-              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDeceased={(v) => markDeceased(c.id, v)} deceased={c.deceased} />
+              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDelete={() => deleteCalf(c.id)} />
           )}
         </div>
       )}
@@ -421,13 +422,12 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
   )
 }
 
-function CalfCard({ calf, onEdit, onDeceased, deceased }) {
+function CalfCard({ calf, onEdit, onDelete }) {
   return (
-    <div className="card" style={{ opacity: deceased ? 0.6 : 1, borderLeft: deceased ? '3px solid var(--color-danger-text)' : undefined }}>
+    <div className="card">
       <div>
         <div>
           <div className="row" style={{ marginBottom: 4 }}>
-            {deceased && <span style={{ color: 'var(--color-danger-text)', fontSize: 16 }}>●</span>}
             <strong>{calf.ear_tag}</strong>
             {calf.breed && <span className="muted">{calf.breed}</span>}
             {calf.identity_number && <span className="muted">ID: {calf.identity_number}</span>}
@@ -450,7 +450,7 @@ function CalfCard({ calf, onEdit, onDeceased, deceased }) {
         </div>
         <div className="row" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)', gap: 6 }}>
           <button style={{ fontSize: 12 }} onClick={onEdit}>Edit</button>
-          <button className="danger-text" style={{ fontSize: 12 }} onClick={() => onDeceased(!deceased)}>{deceased ? 'Restore' : 'Deceased'}</button>
+          <button className="danger-text" style={{ fontSize: 12 }} onClick={onDelete}>Delete</button>
         </div>
       </div>
 

@@ -47,10 +47,6 @@ export default function CattleRegister() {
     setLoading(false)
   }
 
-  async function markDeceased(id, value) {
-    await supabase.from('cattle_register').update({ deceased: value }).eq('id', id)
-    load()
-  }
 
   async function syncExistingData() {
     // Fetch all calves and cattle register entries
@@ -294,13 +290,8 @@ export default function CattleRegister() {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={true} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
-                        <tr key={c.id} style={{ opacity: c.deceased ? 0.6 : 1 }}>
-                          <td>
-                            <div className="row" style={{ gap: 6 }}>
-                              {c.deceased && <span style={{ color: 'var(--color-danger-text)', fontSize: 16 }}>●</span>}
-                              {c.owner}
-                            </div>
-                          </td>
+                        <tr key={c.id}>
+                          <td>{c.owner}</td>
                           <td>{c.identity_number || <span className="faint">—</span>}</td>
                           <td>{c.ear_tag}</td>
                           <td>{c.sex || <span className="faint">—</span>}</td>
@@ -312,9 +303,7 @@ export default function CattleRegister() {
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
                               <button style={{ fontSize: 12 }} onClick={() => startTransfer(c)}>Transfer</button>
-                              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => markDeceased(c.id, !c.deceased)}>
-                                {c.deceased ? 'Restore' : 'Deceased'}
-                              </button>
+                              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteRecord(c.id)}>Delete</button>
                             </div>
                           </td>
                         </tr>
@@ -352,13 +341,8 @@ export default function CattleRegister() {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={false} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
-                        <tr key={c.id} style={{ opacity: c.deceased ? 0.6 : 1 }}>
-                          <td>
-                            <div className="row" style={{ gap: 6 }}>
-                              {c.deceased && <span style={{ color: 'var(--color-danger-text)', fontSize: 16 }}>●</span>}
-                              {c.owner}
-                            </div>
-                          </td>
+                        <tr key={c.id}>
+                          <td>{c.owner}</td>
                           <td>{c.identity_number || <span className="faint">—</span>}</td>
                           <td>{c.ear_tag}</td>
                           <td>{c.sex || <span className="faint">—</span>}</td>
@@ -370,9 +354,7 @@ export default function CattleRegister() {
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
                               <button style={{ fontSize: 12 }} onClick={() => startTransfer(c)}>Transfer</button>
-                              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => markDeceased(c.id, !c.deceased)}>
-                                {c.deceased ? 'Restore' : 'Deceased'}
-                              </button>
+                              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteRecord(c.id)}>Delete</button>
                             </div>
                           </td>
                         </tr>
