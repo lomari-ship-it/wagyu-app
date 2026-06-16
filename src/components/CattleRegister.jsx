@@ -99,13 +99,12 @@ export default function CattleRegister() {
 
   async function saveTransfer(record) {
     setTransferSaving(true)
-    if (transferForm.type === 'sold') {
+    if (transferForm.type === 'kitai') {
       const { error } = await supabase.from('cattle_register').update({
         archived: true,
-        transfer_type: 'sold',
+        transfer_type: 'kitai',
         transfer_date: transferForm.date || null,
-        transfer_customer: transferForm.customer || null,
-        transfer_invoice_number: transferForm.invoice_number || null,
+        transfer_customer: 'Kitai',
       }).eq('id', record.id)
       if (!error) { setTransferringId(null); load() }
     } else if (transferForm.type === 'breeding') {
@@ -179,21 +178,20 @@ export default function CattleRegister() {
           <div style={{ padding: '8px 0' }}>
             <div className="muted" style={{ fontWeight: 500, marginBottom: 8 }}>Transfer: {record.identity_number || record.ear_tag}</div>
             <div className="row" style={{ marginBottom: 10 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'sold' ? 600 : 400 }}>
-                <input type="radio" name={`ttype-${record.id}`} value="sold" checked={tf.type === 'sold'} onChange={() => set('type', 'sold')} style={{ width: 'auto' }} />
-                Sold
-              </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'breeding' ? 600 : 400 }}>
                 <input type="radio" name={`ttype-${record.id}`} value="breeding" checked={tf.type === 'breeding'} onChange={() => set('type', 'breeding')} style={{ width: 'auto' }} />
                 Move to Breeding animals
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'kitai' ? 600 : 400 }}>
+                <input type="radio" name={`ttype-${record.id}`} value="kitai" checked={tf.type === 'kitai'} onChange={() => set('type', 'kitai')} style={{ width: 'auto' }} />
+                Transferred to Kitai pending sale
+              </label>
+
             </div>
 
-            {tf.type === 'sold' && (
+            {tf.type === 'kitai' && (
               <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
-                <div><label>Date</label><input type="date" value={tf.date} onChange={(e) => set('date', e.target.value)} /></div>
-                <div><label>Customer</label><input style={{ width: 160 }} value={tf.customer} onChange={(e) => set('customer', e.target.value)} placeholder="e.g. Kitai" /></div>
-                <div><label>Invoice number</label><input style={{ width: 140 }} value={tf.invoice_number} onChange={(e) => set('invoice_number', e.target.value)} placeholder="e.g. INV-001" /></div>
+                <div><label>Transfer date</label><input type="date" value={tf.date} onChange={(e) => set('date', e.target.value)} /></div>
               </div>
             )}
 
@@ -340,7 +338,7 @@ export default function CattleRegister() {
                       <td>{c.owner}</td>
                       <td>{c.identity_number || <span className="faint">—</span>}</td>
                       <td>{c.ear_tag}</td>
-                      <td><span className="badge neutral">{c.transfer_type || '—'}</span></td>
+                      <td><span className="badge neutral">{c.transfer_type === 'kitai' ? 'Kitai pending sale' : (c.transfer_type || '—')}</span></td>
                       <td>{c.transfer_date || <span className="faint">—</span>}</td>
                       <td>{c.transfer_customer || <span className="faint">—</span>}</td>
                       <td>{c.transfer_invoice_number || <span className="faint">—</span>}</td>
