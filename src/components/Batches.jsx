@@ -27,7 +27,7 @@ export default function Batches() {
     setLoading(true)
     const [b, c] = await Promise.all([
       supabase.from('batches').select('*').order('created_at', { ascending: false }),
-      supabase.from('calves').select('id, owner, ear_tag, identity_number, birth_date, sold_flag').order('created_at', { ascending: false }),
+      supabase.from('calves').select('*').order('created_at', { ascending: false }),
     ])
     if (!b.error) setBatches(b.data || [])
     if (!c.error) setCalves(c.data || [])
@@ -119,7 +119,7 @@ export default function Batches() {
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Batches</h2>
         {batches.length === 0 ? <p className="muted">No batches yet.</p> : (
           <div className="stack">
-            {batches.map((b) => <BatchCard key={b.id} batch={b} onUpdate={updateBatch} onDelete={deleteBatch} onReload={loadAll} />)}
+            {batches.map((b) => <BatchCard key={b.id} batch={b} calves={calves} onUpdate={updateBatch} onDelete={deleteBatch} onReload={loadAll} />)}
           </div>
         )}
       </div>
@@ -177,7 +177,44 @@ function FileUploadField({ label, fileName, fileUrl, fieldName, batchId, onReloa
   )
 }
 
-function BatchCard({ batch, onUpdate, onDelete, onReload }) {
+async function generateBook(batch, calves) {
+  const summaries = batch.calf_summaries || []
+  const calfIds = batch.calf_ids || []
+  let batchCalves = []
+
+  if (summaries.length > 0) {
+    // Match full calf data from calves array using id or ear tag
+    batchCalves = summaries.map(s => {
+      const found = calves.find(c => c.id === s.id || c.ear_tag === s.earTag)
+      return found || s
+    })
+  } else if (calfIds.length > 0) {
+    // Fallback: use calf_ids to find calves directly
+    batchCalves = calves.filter(c => calfIds.includes(c.id))
+  } else {
+    alert('No calf data found for this batch. Please recreate the batch.')
+    return
+  }
+  try {
+    const res = await fetch('/.netlify/functions/generate-book', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calves: batchCalves, batch: { owner: batch.owner, id: batch.id } }),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `birth_notification_${batch.owner}_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    alert('Failed to generate: ' + e.message)
+  }
+}
+
+function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
   const [calvesOpen, setCalvesOpen] = useState(false)
   const summaries = batch.calf_summaries || []
   const isPending = !batch.submission_date || !batch.batch_report_number
@@ -286,7 +323,8 @@ function BatchCard({ batch, onUpdate, onDelete, onReload }) {
         </div>
       </div>
 
-      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }} className="row">
+        <button className="primary" onClick={() => generateBook(batch, calves)}>Generate birth notification</button>
         <button className="danger-text" onClick={() => onDelete(batch.id)}>Delete batch</button>
       </div>
     </div>

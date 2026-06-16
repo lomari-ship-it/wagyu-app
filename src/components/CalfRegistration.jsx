@@ -36,30 +36,6 @@ export default function CalfRegistration() {
     else { alert(`${toAdd.length} calf record${toAdd.length !== 1 ? 's' : ''} added to General cattle register.`) }
   }
 
-  async function generateBook(ownerFilter) {
-    const toExport = ownerFilter
-      ? calves.filter((c) => c.owner === ownerFilter && !c.sold_flag)
-      : calves.filter((c) => !c.sold_flag)
-    if (toExport.length === 0) { alert('No active calves to export.'); return }
-    try {
-      const res = await fetch('/.netlify/functions/generate-book', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(toExport),
-      })
-      if (!res.ok) throw new Error('Generation failed')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `birth_notification_${ownerFilter || 'all'}_${new Date().toISOString().slice(0,10)}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      alert('Failed to generate: ' + e.message)
-    }
-  }
-
   function update(field, value) { setForm((f) => ({ ...f, [field]: value })) }
 
   const idYear = form.birth_date ? form.birth_date.slice(2, 4) : '--'
@@ -163,7 +139,6 @@ export default function CalfRegistration() {
           <div className="row">
             <span className="muted">{activeCount} active{soldCount > 0 ? `, ${soldCount} sold/transferred` : ''}</span>
             <button onClick={syncToRegister} style={{ fontSize: 12 }}>Sync all to cattle register</button>
-            <button onClick={() => generateBook(null)} style={{ fontSize: 12 }}>Generate birth notification (all)</button>
           </div>
         </div>
         <form onSubmit={handleSubmit} className="grid-form" style={{ marginBottom: 12 }}>

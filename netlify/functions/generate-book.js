@@ -1,23 +1,25 @@
-const path = require('path')
-const fs = require('fs')
+const ExcelJS = require('exceljs')
+const templateB64 = require('./template_b64')
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' }
   }
 
-  let calves
+  let body
   try {
-    calves = JSON.parse(event.body || '[]')
+    body = JSON.parse(event.body || '{}')
   } catch (e) {
     return { statusCode: 400, body: 'Invalid JSON' }
   }
 
+  const calves = body.calves || []
+  const batchInfo = body.batch || {}
+
   try {
-    const ExcelJS = require('exceljs')
-    const templatePath = path.join(__dirname, 'Book2.xlsx')
+    const templateBuffer = Buffer.from(templateB64, 'base64')
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.readFile(templatePath)
+    await workbook.xlsx.load(templateBuffer)
     const ws = workbook.getWorksheet('birth notification')
     const START_ROW = 4
 
@@ -66,7 +68,7 @@ exports.handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename="birth_notification.xlsx"',
+        'Content-Disposition': `attachment; filename="birth_notification_${batchInfo.owner || 'all'}_${new Date().toISOString().slice(0,10)}.xlsx"`,
       },
       body: base64,
       isBase64Encoded: true,
