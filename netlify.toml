@@ -4,7 +4,9 @@
 
 [functions]
   directory = "netlify/functions"
-  node_bundler = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "18"
 
 [[headers]]
   for = "/*"
