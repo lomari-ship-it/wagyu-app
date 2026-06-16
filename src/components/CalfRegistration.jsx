@@ -258,6 +258,7 @@ export default function CalfRegistration() {
               <option value="15 - Nellore">15 - Nellore</option>
             </select>
           </div>
+          <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
           <div>
             <label>Sex</label>
             <select value={form.sex} onChange={(e) => update('sex', e.target.value)}>
