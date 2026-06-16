@@ -385,6 +385,7 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
               <option value="15 - Nellore">15 - Nellore</option>
             </select>
         </div>
+        <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
         <div>
           <label>Sex</label>
           <select value={f.sex} onChange={(e) => set('sex', e.target.value)}>
