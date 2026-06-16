@@ -45,7 +45,7 @@ exports.handler = async (event) => {
         if (parts.length === 3) { year = parts[0]; month = parts[1]; day = parts[2] }
       }
 
-      const identity = calf.identity_number || calf.ear_tag || ''
+      const identity = calf.ear_tag || calf.identity_number || ''
       const r = ws.getRow(row)
       r.getCell('C').value = identity
       r.getCell('E').value = day
