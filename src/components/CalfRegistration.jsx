@@ -173,8 +173,8 @@ export default function CalfRegistration() {
 
 
 
-  async function deleteCalf(id) {
-    await supabase.from('calves').delete().eq('id', id)
+  async function markDeceased(id, value) {
+    await supabase.from('calves').update({ deceased: value }).eq('id', id)
     loadCalves()
   }
 
@@ -315,7 +315,7 @@ export default function CalfRegistration() {
           {displayed.map((c) =>
             editingId === c.id
               ? <EditCalfCard key={c.id} calf={c} editForm={editForm} setEditForm={setEditForm} onSave={() => saveEdit(c)} onCancel={() => setEditingId(null)} />
-              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDelete={() => deleteCalf(c.id)} />
+              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDeceased={(v) => markDeceased(c.id, v)} deceased={c.deceased} />
           )}
         </div>
       )}
@@ -421,12 +421,13 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
   )
 }
 
-function CalfCard({ calf, onEdit, onDelete }) {
+function CalfCard({ calf, onEdit, onDeceased, deceased }) {
   return (
-    <div className="card" style={{ opacity: calf.sold_flag ? 0.8 : 1 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div className="card" style={{ opacity: deceased ? 0.6 : 1, borderLeft: deceased ? '3px solid var(--color-danger-text)' : undefined }}>
+      <div>
         <div>
           <div className="row" style={{ marginBottom: 4 }}>
+            {deceased && <span style={{ color: 'var(--color-danger-text)', fontSize: 16 }}>●</span>}
             <strong>{calf.ear_tag}</strong>
             {calf.breed && <span className="muted">{calf.breed}</span>}
             {calf.identity_number && <span className="muted">ID: {calf.identity_number}</span>}
@@ -447,9 +448,9 @@ function CalfCard({ calf, onEdit, onDelete }) {
           )}
           {calf.notes && <div className="muted" style={{ marginTop: 4 }}>{calf.notes}</div>}
         </div>
-        <div className="row">
-          <button onClick={onEdit}>Edit</button>
-          <button className="danger-text" onClick={onDelete}>Delete</button>
+        <div className="row" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)', gap: 6 }}>
+          <button style={{ fontSize: 12 }} onClick={onEdit}>Edit</button>
+          <button className="danger-text" style={{ fontSize: 12 }} onClick={() => onDeceased(!deceased)}>{deceased ? 'Restore' : 'Deceased'}</button>
         </div>
       </div>
 

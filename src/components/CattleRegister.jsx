@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
 
-const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu' }
-const emptyGeneral  = { owner: '', identity_number: '', ear_tag: '' }
+const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '' }
+const emptyGeneral  = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: '', mother_id: '', father_id: '' }
 const emptyTransfer = { type: '', date: '', customer: '', invoice_number: '', breed: 'Wagyu', sex: '', date_of_birth: '' }
 
 function sortRecords(records) {
@@ -47,12 +47,18 @@ export default function CattleRegister() {
     setLoading(false)
   }
 
+  async function markDeceased(id, value) {
+    await supabase.from('cattle_register').update({ deceased: value }).eq('id', id)
+    load()
+  }
+
   async function saveBreeding(e) {
     e.preventDefault(); setBSaving(true); setBMsg('Saving...')
     const { error } = await supabase.from('cattle_register').insert({
       animal_type: 'breeding', owner: bForm.owner, breed: bForm.breed || null,
       ear_tag: bForm.ear_tag, identity_number: bForm.identity_number || null,
       sex: bForm.sex || null, date_of_birth: bForm.date_of_birth || null,
+      mother_id: bForm.mother_id || null, father_id: bForm.father_id || null,
     })
     if (error) { setBMsg('Failed: ' + error.message) }
     else { setBMsg('Saved.'); setBForm(emptyBreeding); load(); setTimeout(() => setBMsg(''), 2500) }
@@ -64,6 +70,8 @@ export default function CattleRegister() {
     const { error } = await supabase.from('cattle_register').insert({
       animal_type: 'general', owner: gForm.owner,
       ear_tag: gForm.ear_tag, identity_number: gForm.identity_number || null,
+      sex: gForm.sex || null, date_of_birth: gForm.date_of_birth || null, breed: gForm.breed || null,
+      mother_id: gForm.mother_id || null, father_id: gForm.father_id || null,
     })
     if (error) { setGMsg('Failed: ' + error.message) }
     else { setGMsg('Saved.'); setGForm(emptyGeneral); load(); setTimeout(() => setGMsg(''), 2500) }
@@ -86,6 +94,8 @@ export default function CattleRegister() {
       updates.breed = editForm.breed || null
       updates.sex = editForm.sex || null
       updates.date_of_birth = editForm.date_of_birth || null
+      updates.mother_id = editForm.mother_id || null
+      updates.father_id = editForm.father_id || null
     }
     const { error } = await supabase.from('cattle_register').update(updates).eq('id', record.id)
     if (!error) { setEditingId(null); load() }
@@ -252,25 +262,34 @@ export default function CattleRegister() {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={true} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
-                        <tr key={c.id}>
-                          <td>{c.owner}</td>
+                        <tr key={c.id} style={{ opacity: c.deceased ? 0.6 : 1 }}>
+                          <td>
+                            <div className="row" style={{ gap: 6 }}>
+                              {c.deceased && <span style={{ color: 'var(--color-danger-text)', fontSize: 16 }}>●</span>}
+                              {c.owner}
+                            </div>
+                          </td>
                           <td>{c.identity_number || <span className="faint">—</span>}</td>
                           <td>{c.ear_tag}</td>
                           <td>{c.sex || <span className="faint">—</span>}</td>
                           <td>{c.date_of_birth || <span className="faint">—</span>}</td>
                           <td>{c.breed || <span className="faint">—</span>}</td>
+                          <td>{c.mother_id || <span className="faint">—</span>}</td>
+                          <td>{c.father_id || <span className="faint">—</span>}</td>
                           <td style={{ textAlign: 'right' }}>
-                            <div className="row" style={{ justifyContent: 'flex-end' }}>
-                              <button onClick={() => startEdit(c)}>Edit</button>
-                              <button onClick={() => startTransfer(c)}>Transfer</button>
-                              <button className="danger-text" onClick={() => deleteRecord(c.id)}>Delete</button>
+                            <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+                              <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
+                              <button style={{ fontSize: 12 }} onClick={() => startTransfer(c)}>Transfer</button>
+                              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => markDeceased(c.id, !c.deceased)}>
+                                {c.deceased ? 'Restore' : 'Deceased'}
+                              </button>
                             </div>
                           </td>
                         </tr>
                       )
                     })}
                   </tbody>
-                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={6}>Total breeding animals</td><td style={{ textAlign: 'right' }}>{breeding.length}</td></tr></tfoot>
+                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={8}>Total breeding animals</td><td style={{ textAlign: 'right' }}>{breeding.length}</td></tr></tfoot>
                 </table>
               </div>
             )}
@@ -295,28 +314,40 @@ export default function CattleRegister() {
             {loading ? null : general.length === 0 ? <p className="muted">No general cattle records yet.</p> : (
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Owner</th><th>Identity number</th><th>Ear tag</th><th></th></tr></thead>
+                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th></th></tr></thead>
                   <tbody>
                     {general.map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={false} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
-                        <tr key={c.id}>
-                          <td>{c.owner}</td>
+                        <tr key={c.id} style={{ opacity: c.deceased ? 0.6 : 1 }}>
+                          <td>
+                            <div className="row" style={{ gap: 6 }}>
+                              {c.deceased && <span style={{ color: 'var(--color-danger-text)', fontSize: 16 }}>●</span>}
+                              {c.owner}
+                            </div>
+                          </td>
                           <td>{c.identity_number || <span className="faint">—</span>}</td>
                           <td>{c.ear_tag}</td>
+                          <td>{c.sex || <span className="faint">—</span>}</td>
+                          <td>{c.date_of_birth || <span className="faint">—</span>}</td>
+                          <td>{c.breed || <span className="faint">—</span>}</td>
+                          <td>{c.mother_id || <span className="faint">—</span>}</td>
+                          <td>{c.father_id || <span className="faint">—</span>}</td>
                           <td style={{ textAlign: 'right' }}>
-                            <div className="row" style={{ justifyContent: 'flex-end' }}>
-                              <button onClick={() => startEdit(c)}>Edit</button>
-                              <button onClick={() => startTransfer(c)}>Transfer</button>
-                              <button className="danger-text" onClick={() => deleteRecord(c.id)}>Delete</button>
+                            <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+                              <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
+                              <button style={{ fontSize: 12 }} onClick={() => startTransfer(c)}>Transfer</button>
+                              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => markDeceased(c.id, !c.deceased)}>
+                                {c.deceased ? 'Restore' : 'Deceased'}
+                              </button>
                             </div>
                           </td>
                         </tr>
                       )
                     })}
                   </tbody>
-                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={3}>Total cattle</td><td style={{ textAlign: 'right' }}>{general.length}</td></tr></tfoot>
+                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={8}>Total cattle</td><td style={{ textAlign: 'right' }}>{general.length}</td></tr></tfoot>
                 </table>
               </div>
             )}
@@ -345,7 +376,7 @@ export default function CattleRegister() {
                       <td style={{ textAlign: 'right' }}>
                         <div className="row" style={{ justifyContent: 'flex-end' }}>
                           <button onClick={() => unarchive(c.id)}>Restore</button>
-                          <button className="danger-text" onClick={() => deleteRecord(c.id)}>Delete</button>
+                          <button className="danger-text" onClick={() => deleteRecord(c.id)}>Remove</button>
                         </div>
                       </td>
                     </tr>
