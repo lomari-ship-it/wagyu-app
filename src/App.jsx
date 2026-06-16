@@ -6,6 +6,7 @@ import CalfRegistration from './components/CalfRegistration'
 import CattleRegister from './components/CattleRegister'
 import Batches from './components/Batches'
 import Reconciliation from './components/Reconciliation'
+import LateRegistrations from './components/LateRegistrations'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'cattle', label: 'Cattle register' },
   { id: 'batches', label: 'Batches & invoices' },
   { id: 'reconciliation', label: 'Reconciliation' },
+  { id: 'late', label: 'Late registrations' },
 ]
 
 export default function App() {
@@ -68,6 +70,7 @@ export default function App() {
         {tab === 'cattle' && <CattleRegister />}
         {tab === 'batches' && <Batches />}
         {tab === 'reconciliation' && <Reconciliation />}
+        {tab === 'late' && <LateRegistrations />}
       </main>
     </div>
   )

@@ -13,7 +13,11 @@ export default function CalfRegistration() {
   const [saving, setSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [showSold, setShowSold] = useState(false)
+  const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
+  const [showImport, setShowImport] = useState(false)
   const [editForm, setEditForm] = useState({})
 
   useEffect(() => { loadCalves() }, [])
@@ -34,6 +38,65 @@ export default function CalfRegistration() {
     const { error } = await supabase.from('cattle_register').insert(rows)
     if (error) { alert('Sync failed: ' + error.message) }
     else { alert(`${toAdd.length} calf record${toAdd.length !== 1 ? 's' : ''} added to General cattle register.`) }
+  }
+
+  async function handleImport(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setImporting(true)
+    setImportMsg('Reading file...')
+
+    const text = await file.text()
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    if (lines.length < 2) { setImportMsg('File is empty or has no data rows.'); setImporting(false); return }
+
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_'))
+    const rows = lines.slice(1)
+    const records = []
+
+    for (const row of rows) {
+      const values = row.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const obj = {}
+      headers.forEach((h, i) => { obj[h] = values[i] || '' })
+
+      // Build identity number from field or leave null
+      let identityNumber = obj.identity_number || null
+
+      records.push({
+        owner: obj.owner || '',
+        breed: obj.breed || 'Wagyu',
+        ear_tag: obj.ear_tag || '',
+        identity_number: identityNumber || null,
+        birth_date: obj.birth_date || null,
+        color: obj.color || '',
+        sex: obj.sex || null,
+        calf_details: obj.calf_details || 'Single',
+        birth_mass: obj.birth_mass ? parseFloat(obj.birth_mass) : null,
+        mother_id: obj.mother_id || null,
+        father_id: obj.father_id || null,
+        notes: obj.notes || null,
+      })
+    }
+
+    const valid = records.filter(r => r.owner && r.ear_tag && r.birth_date)
+    const skipped = records.length - valid.length
+
+    if (valid.length === 0) { setImportMsg('No valid rows found. Check owner, ear_tag and birth_date are filled.'); setImporting(false); return }
+
+    setImportMsg(`Importing ${valid.length} calves...`)
+
+    const { error } = await supabase.from('calves').insert(valid)
+    if (error) { setImportMsg('Import failed: ' + error.message); setImporting(false); return }
+
+    // Also add to general cattle register
+    const cattleRows = valid.map(r => ({ animal_type: 'general', owner: r.owner, ear_tag: r.ear_tag, identity_number: r.identity_number || null }))
+    await supabase.from('cattle_register').insert(cattleRows)
+
+    setImportMsg(`✓ Imported ${valid.length} calves${skipped > 0 ? `, ${skipped} rows skipped (missing required fields)` : ''}.`)
+    setImporting(false)
+    setShowImport(false)
+    loadCalves()
+    e.target.value = ''
   }
 
   function update(field, value) { setForm((f) => ({ ...f, [field]: value })) }
@@ -129,17 +192,35 @@ export default function CalfRegistration() {
 
   const activeCount = calves.filter((c) => !c.sold_flag).length
   const soldCount = calves.filter((c) => c.sold_flag).length
-  const displayed = showSold ? calves : calves.filter((c) => !c.sold_flag)
+  const searchLower = search.toLowerCase()
+  const displayed = (showSold ? calves : calves.filter((c) => !c.sold_flag))
+    .filter((c) => !search || (c.ear_tag || '').toLowerCase().includes(searchLower) || (c.identity_number || '').toLowerCase().includes(searchLower))
 
   return (
     <div className="stack" style={{ gap: 24 }}>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Calf registration</h2>
-          <div className="row">
+          <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span className="muted">{activeCount} active{soldCount > 0 ? `, ${soldCount} sold/transferred` : ''}</span>
-            <button onClick={syncToRegister} style={{ fontSize: 12 }}>Sync all to cattle register</button>
+            <div className="row" style={{ gap: 6 }}>
+              <button onClick={syncToRegister} style={{ fontSize: 12 }}>Sync all to cattle register</button>
+              <button onClick={() => setShowImport(v => !v)} style={{ fontSize: 12 }}>Import from CSV</button>
+            </div>
           </div>
+          {showImport && (
+            <div style={{ marginTop: 8, padding: '12px', background: 'var(--color-accent-light)', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>Import calves from CSV</div>
+              <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                Upload a CSV file with columns: owner, breed, ear_tag, identity_number, birth_date (YYYY-MM-DD), color, sex, calf_details, birth_mass, mother_id, father_id, notes.
+                Required: owner, ear_tag, birth_date.
+              </p>
+              <div className="row">
+                <input type="file" accept=".csv" onChange={handleImport} disabled={importing} style={{ fontSize: 13 }} />
+                {importMsg && <span className="muted" style={{ fontSize: 12 }}>{importMsg}</span>}
+              </div>
+            </div>
+          )}
         </div>
         <form onSubmit={handleSubmit} className="grid-form" style={{ marginBottom: 12 }}>
           <div>
@@ -151,7 +232,7 @@ export default function CalfRegistration() {
           </div>
           <div>
             <label>Breed *</label>
-            <select required value={form.breed} onChange={(e) => update('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option></select>
+            <select required value={form.breed} onChange={(e) => update('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select>
           </div>
           <div>
             <label>Ear tag number *</label>
@@ -229,6 +310,15 @@ export default function CalfRegistration() {
         </form>
       </div>
 
+      <div style={{ marginBottom: 8 }}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by ear tag or identity number..."
+          style={{ width: '100%', maxWidth: 360 }}
+        />
+      </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
         <input type="checkbox" checked={showSold} onChange={(e) => setShowSold(e.target.checked)} style={{ width: 'auto' }} />
         Show sold/transferred entries
@@ -271,7 +361,7 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
         </div>
         <div>
           <label>Breed</label>
-          <select value={f.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option></select>
+          <select value={f.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select>
         </div>
         <div>
           <label>Ear tag</label>

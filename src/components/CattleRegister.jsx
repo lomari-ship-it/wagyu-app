@@ -29,6 +29,7 @@ export default function CattleRegister() {
   const [transferringId, setTransferringId] = useState(null)
   const [transferForm, setTransferForm] = useState(emptyTransfer)
   const [transferSaving, setTransferSaving] = useState(false)
+  const [search, setSearch] = useState('')
   const [breedingOpen, setBreedingOpen] = useState(true)
   const [generalOpen,  setGeneralOpen]  = useState(true)
   const [archivedOpen, setArchivedOpen] = useState(false)
@@ -156,7 +157,7 @@ export default function CattleRegister() {
         {isBreeding && <>
           <td><select value={editForm.sex} onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value }))}><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option></select></td>
           <td><input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></td>
-          <td><select value={editForm.breed} onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option></select></td>
+          <td><select value={editForm.breed} onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></td>
         </>}
         <td style={{ textAlign: 'right' }}>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
@@ -200,7 +201,7 @@ export default function CattleRegister() {
               <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
                 <div><label>Sex</label><select value={tf.sex} onChange={(e) => set('sex', e.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
                 <div><label>Date of birth</label><input type="date" value={tf.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} /></div>
-                <div><label>Breed</label><select value={tf.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option></select></div>
+                <div><label>Breed</label><select value={tf.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></div>
               </div>
             )}
 
@@ -217,6 +218,16 @@ export default function CattleRegister() {
   return (
     <div className="stack" style={{ gap: 32 }}>
 
+      <div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by ear tag or identity number..."
+          style={{ width: '100%', maxWidth: 360 }}
+        />
+      </div>
+
       {/* Breeding animals */}
       <div className="card">
         <SectionHeader title="Breeding animals" count={breeding.length} open={breedingOpen} onToggle={() => setBreedingOpen((v) => !v)} sub="Bulls, cows and heifers used for breeding." />
@@ -228,7 +239,7 @@ export default function CattleRegister() {
               <div><label>Ear tag number *</label><input required value={bForm.ear_tag} onChange={(e) => setBForm((f) => ({ ...f, ear_tag: e.target.value }))} placeholder="e.g. NA12345" /></div>
               <div><label>Sex *</label><select required value={bForm.sex} onChange={(e) => setBForm((f) => ({ ...f, sex: e.target.value }))}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
               <div><label>Date of birth *</label><input required type="date" value={bForm.date_of_birth} onChange={(e) => setBForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></div>
-              <div><label>Breed *</label><select required value={bForm.breed} onChange={(e) => setBForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option></select></div>
+              <div><label>Breed *</label><select required value={bForm.breed} onChange={(e) => setBForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></div>
               <div style={{ gridColumn: '1 / -1' }} className="row">
                 <button type="submit" className="primary" disabled={bSaving}>Add breeding animal</button>
                 <span className="muted">{bMsg}</span>
