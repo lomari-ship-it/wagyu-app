@@ -52,6 +52,37 @@ export default function CattleRegister() {
     load()
   }
 
+  async function syncExistingData() {
+    // Fetch all calves and cattle register entries
+    const [{ data: calvesData }, { data: cattleData }] = await Promise.all([
+      supabase.from('calves').select('ear_tag, identity_number, birth_date, color, sex, calf_details, birth_mass, mother_id, father_id, breed'),
+      supabase.from('cattle_register').select('id, ear_tag, sex, date_of_birth, breed, mother_id, father_id, identity_number'),
+    ])
+    if (!calvesData || !cattleData) { alert('Failed to load data for sync.'); return }
+
+    const calfMap = {}
+    calvesData.forEach(c => { calfMap[c.ear_tag] = c })
+
+    let updated = 0
+    for (const cattle of cattleData) {
+      const calf = calfMap[cattle.ear_tag]
+      if (!calf) continue
+      const updates = {}
+      if (!cattle.sex && calf.sex) updates.sex = calf.sex
+      if (!cattle.date_of_birth && calf.birth_date) updates.date_of_birth = calf.birth_date
+      if (!cattle.breed && calf.breed) updates.breed = calf.breed
+      if (!cattle.mother_id && calf.mother_id) updates.mother_id = calf.mother_id
+      if (!cattle.father_id && calf.father_id) updates.father_id = calf.father_id
+      if (!cattle.identity_number && calf.identity_number) updates.identity_number = calf.identity_number
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('cattle_register').update(updates).eq('id', cattle.id)
+        updated++
+      }
+    }
+    alert(`Sync complete. ${updated} record${updated !== 1 ? 's' : ''} updated.`)
+    load()
+  }
+
   async function saveBreeding(e) {
     e.preventDefault(); setBSaving(true); setBMsg('Saving...')
     const { error } = await supabase.from('cattle_register').insert({
@@ -226,7 +257,7 @@ export default function CattleRegister() {
   return (
     <div className="stack" style={{ gap: 32 }}>
 
-      <div>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input
           type="text"
           value={search}
@@ -234,6 +265,7 @@ export default function CattleRegister() {
           placeholder="Search by ear tag or identity number..."
           style={{ width: '100%', maxWidth: 360 }}
         />
+        <button style={{ fontSize: 12 }} onClick={syncExistingData}>Sync data from calf registrations</button>
       </div>
 
       {/* Breeding animals */}
