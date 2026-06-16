@@ -7,6 +7,7 @@ import CattleRegister from './components/CattleRegister'
 import Batches from './components/Batches'
 import Reconciliation from './components/Reconciliation'
 import LateRegistrations from './components/LateRegistrations'
+import KitaiTransfers from './components/KitaiTransfers'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'batches', label: 'Batches & invoices' },
   { id: 'reconciliation', label: 'Reconciliation' },
   { id: 'late', label: 'Late registrations' },
+  { id: 'kitai', label: 'Kitai transfers' },
 ]
 
 export default function App() {
@@ -71,6 +73,7 @@ export default function App() {
         {tab === 'batches' && <Batches />}
         {tab === 'reconciliation' && <Reconciliation />}
         {tab === 'late' && <LateRegistrations />}
+        {tab === 'kitai' && <KitaiTransfers />}
       </main>
     </div>
   )

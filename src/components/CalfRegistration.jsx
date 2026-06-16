@@ -12,7 +12,6 @@ export default function CalfRegistration() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
-  const [showSold, setShowSold] = useState(false)
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -172,28 +171,16 @@ export default function CalfRegistration() {
     if (!error) { setEditingId(null); loadCalves() }
   }
 
-  async function toggleSold(calf) {
-    const newFlag = !calf.sold_flag
-    const updates = { sold_flag: newFlag }
-    if (newFlag && !calf.sold_buyer) updates.sold_buyer = 'Kitai'
-    await supabase.from('calves').update(updates).eq('id', calf.id)
-    loadCalves()
-  }
 
-  async function updateSoldField(calf, field, value) {
-    await supabase.from('calves').update({ [field]: value }).eq('id', calf.id)
-    loadCalves()
-  }
 
   async function deleteCalf(id) {
     await supabase.from('calves').delete().eq('id', id)
     loadCalves()
   }
 
-  const activeCount = calves.filter((c) => !c.sold_flag).length
-  const soldCount = calves.filter((c) => c.sold_flag).length
+
   const searchLower = search.toLowerCase()
-  const displayed = (showSold ? calves : calves.filter((c) => !c.sold_flag))
+  const displayed = calves
     .filter((c) => !search || (c.ear_tag || '').toLowerCase().includes(searchLower) || (c.identity_number || '').toLowerCase().includes(searchLower))
 
   return (
@@ -202,7 +189,7 @@ export default function CalfRegistration() {
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Calf registration</h2>
           <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span className="muted">{activeCount} active{soldCount > 0 ? `, ${soldCount} sold/transferred` : ''}</span>
+            <span className="muted">{calves.length} entries</span>
             <div className="row" style={{ gap: 6 }}>
               <button onClick={syncToRegister} style={{ fontSize: 12 }}>Sync all to cattle register</button>
               <button onClick={() => setShowImport(v => !v)} style={{ fontSize: 12 }}>Import from CSV</button>
@@ -319,10 +306,6 @@ export default function CalfRegistration() {
           style={{ width: '100%', maxWidth: 360 }}
         />
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
-        <input type="checkbox" checked={showSold} onChange={(e) => setShowSold(e.target.checked)} style={{ width: 'auto' }} />
-        Show sold/transferred entries
-      </label>
 
       {loading ? <p className="muted">Loading...</p> : displayed.length === 0 ? (
         <p className="muted">{showSold ? 'No calf entries saved yet.' : 'No active calf entries.'}</p>
@@ -331,7 +314,7 @@ export default function CalfRegistration() {
           {displayed.map((c) =>
             editingId === c.id
               ? <EditCalfCard key={c.id} calf={c} editForm={editForm} setEditForm={setEditForm} onSave={() => saveEdit(c)} onCancel={() => setEditingId(null)} />
-              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onToggleSold={() => toggleSold(c)} onUpdateSoldField={(f, v) => updateSoldField(c, f, v)} onDelete={() => deleteCalf(c.id)} />
+              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDelete={() => deleteCalf(c.id)} />
           )}
         </div>
       )}
@@ -437,7 +420,7 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
   )
 }
 
-function CalfCard({ calf, onEdit, onToggleSold, onUpdateSoldField, onDelete }) {
+function CalfCard({ calf, onEdit, onDelete }) {
   return (
     <div className="card" style={{ opacity: calf.sold_flag ? 0.8 : 1 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -465,28 +448,11 @@ function CalfCard({ calf, onEdit, onToggleSold, onUpdateSoldField, onDelete }) {
         </div>
         <div className="row">
           <button onClick={onEdit}>Edit</button>
-          <button onClick={onToggleSold}>{calf.sold_flag ? 'Unmark sold' : 'Mark sold'}</button>
           <button className="danger-text" onClick={onDelete}>Delete</button>
         </div>
       </div>
 
-      {calf.sold_flag && (
-        <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 8, paddingTop: 8 }}>
-          <div className="muted" style={{ fontWeight: 500, marginBottom: 6 }}>Sold / transferred details</div>
-          <div className="row">
-            <div><label>Buyer</label><input style={{ width: 120 }} defaultValue={calf.sold_buyer || 'Kitai'} onBlur={(e) => onUpdateSoldField('sold_buyer', e.target.value)} /></div>
-            <div><label>Sold date</label><input type="date" defaultValue={calf.sold_date || ''} onBlur={(e) => onUpdateSoldField('sold_date', e.target.value || null)} /></div>
-            <div><label>My invoice number</label><input style={{ width: 140 }} defaultValue={calf.sold_invoice_number || ''} onBlur={(e) => onUpdateSoldField('sold_invoice_number', e.target.value)} placeholder="e.g. INV-2026-01" /></div>
-            <div><label>My invoice date</label><input type="date" defaultValue={calf.sold_invoice_date || ''} onBlur={(e) => onUpdateSoldField('sold_invoice_date', e.target.value || null)} /></div>
-            <div><label>Payment received date</label><input type="date" defaultValue={calf.sold_payment_received_date || ''} onBlur={(e) => onUpdateSoldField('sold_payment_received_date', e.target.value || null)} /></div>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <span className={`badge ${calf.sold_payment_received_date ? 'success' : 'warning'}`}>
-              {calf.sold_payment_received_date ? 'Payment received' : 'Payment pending'}
-            </span>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }
