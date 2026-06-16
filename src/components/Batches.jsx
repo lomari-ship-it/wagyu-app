@@ -68,7 +68,15 @@ export default function Batches() {
   }
 
   async function updateBatch(id, field, value) {
-    await supabase.from('batches').update({ [field]: value || null }).eq('id', id)
+    const updates = { [field]: value || null }
+    // Auto-calculate total amount when rate or qty changes
+    const batch = batches.find(b => b.id === id)
+    if (batch) {
+      const rate = field === 'rate_per_test' ? (value ? parseFloat(value) : null) : batch.rate_per_test
+      const qty = field === 'invoice_test_count' ? (value ? parseInt(value) : null) : batch.invoice_test_count
+      if (rate && qty) updates.invoice_amount_payable = rate * qty
+    }
+    await supabase.from('batches').update(updates).eq('id', id)
     loadAll()
   }
 
@@ -287,10 +295,14 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
             <input type="number" min="0" style={{ width: 100 }} defaultValue={batch.invoice_test_count || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_test_count', e.target.value ? parseInt(e.target.value) : null)} />
           </div>
           <div>
-            <label>Amount payable excl. VAT</label>
+            <label>Rate per test (N$)</label>
             <div className="row" style={{ gap: 4, alignItems: 'center' }}>
-              <input type="number" min="0" step="0.01" style={{ width: 130 }} defaultValue={batch.invoice_amount_payable || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_amount_payable', e.target.value ? parseFloat(e.target.value) : null)} />
-              {batch.invoice_amount_payable && <span className="muted" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{fmtCurrency(batch.invoice_amount_payable)}</span>}
+              <input type="number" min="0" step="0.01" style={{ width: 120 }} defaultValue={batch.rate_per_test || ''} onBlur={(e) => onUpdate(batch.id, 'rate_per_test', e.target.value ? parseFloat(e.target.value) : null)} placeholder="e.g. 241.00" />
+              {batch.rate_per_test && batch.invoice_test_count && (
+                <span className="muted" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                  = {fmtCurrency(batch.rate_per_test * batch.invoice_test_count)} total
+                </span>
+              )}
             </div>
           </div>
           <div>

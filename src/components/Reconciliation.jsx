@@ -24,67 +24,169 @@ export default function Reconciliation() {
 
 function InvoiceReconciliation() {
   const [batches, setBatches] = useState([])
+  const [calves, setCalves] = useState([])
   const [loading, setLoading] = useState(true)
+  const [expandedBatch, setExpandedBatch] = useState(null)
 
   useEffect(() => {
-    supabase.from('batches').select('*').order('invoice_date', { ascending: false }).then(({ data }) => {
-      setBatches(data || [])
+    Promise.all([
+      supabase.from('batches').select('*').order('invoice_date', { ascending: false }),
+      supabase.from('calves').select('id, owner, ear_tag, identity_number'),
+    ]).then(([b, c]) => {
+      setBatches(b.data || [])
+      setCalves(c.data || [])
       setLoading(false)
     })
   }, [])
 
   if (loading) return <p className="muted">Loading...</p>
 
-  const relevant = batches.filter((b) => b.invoice_number || b.batch_report_number || b.invoice_test_count || b.invoice_amount_payable)
+  const relevant = batches.filter((b) => b.invoice_number || b.batch_report_number || b.invoice_test_count || b.rate_per_test)
 
+  // Calculate per-owner breakdown for a batch
+  function getOwnerBreakdown(batch) {
+    const summaries = batch.calf_summaries || []
+    const calfIds = batch.calf_ids || []
+    const batchCalves = summaries.length > 0
+      ? summaries.map(s => calves.find(c => c.id === s.id || c.ear_tag === s.earTag) || s)
+      : calves.filter(c => calfIds.includes(c.id))
+
+    const byOwner = {}
+    batchCalves.forEach(c => {
+      const owner = c.owner || 'Unknown'
+      byOwner[owner] = (byOwner[owner] || 0) + 1
+    })
+    return byOwner
+  }
+
+  // Grand totals
   const totalTests = relevant.reduce((s, b) => s + (b.invoice_test_count || 0), 0)
   const totalAmount = relevant.reduce((s, b) => s + (parseFloat(b.invoice_amount_payable) || 0), 0)
+
+  // Per-owner totals across all batches
+  const ownerTotals = {}
+  relevant.forEach(b => {
+    const breakdown = getOwnerBreakdown(b)
+    const rate = b.rate_per_test || (b.invoice_test_count ? (parseFloat(b.invoice_amount_payable) || 0) / b.invoice_test_count : 0)
+    Object.entries(breakdown).forEach(([owner, qty]) => {
+      if (!ownerTotals[owner]) ownerTotals[owner] = { qty: 0, amount: 0 }
+      ownerTotals[owner].qty += qty
+      ownerTotals[owner].amount += qty * rate
+    })
+  })
 
   if (relevant.length === 0) {
     return <p className="muted">No invoice or batch report numbers recorded yet. Fill these in on the Batches tab.</p>
   }
 
   return (
-    <div>
-      <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Invoice and batch report reconciliation</h2>
-      <p className="muted" style={{ marginBottom: 12 }}>Pulled automatically from batch records.</p>
-      <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-        <table>
-          <thead>
-            <tr>
-              <th>Owner</th>
-              <th>NSBA invoice no.</th>
-              <th>Batch Detail Report U-no.</th>
-              <th style={{ textAlign: 'right' }}>Qty tests</th>
-              <th style={{ textAlign: 'right' }}>Amount payable excl. VAT</th>
-              <th>Payment date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {relevant.map((b) => (
-              <tr key={b.id}>
-                <td>{b.owner}</td>
-                <td>{b.invoice_number || <span className="faint">—</span>}</td>
-                <td>{b.batch_report_number || <span className="faint">—</span>}</td>
-                <td style={{ textAlign: 'right' }}>{b.invoice_test_count || <span className="faint">—</span>}</td>
-                <td style={{ textAlign: 'right' }}>{b.invoice_amount_payable ? fmt(b.invoice_amount_payable) : <span className="faint">—</span>}</td>
-                <td>
-                  {b.payment_date
-                    ? <span className="badge success">{b.payment_date}</span>
-                    : <span className="badge warning">Pending</span>}
-                </td>
+    <div className="stack" style={{ gap: 24 }}>
+      <div>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 500 }}>Invoice and batch report reconciliation</h2>
+        <p className="muted" style={{ marginBottom: 12 }}>Pulled automatically from batch records.</p>
+        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Owner(s)</th>
+                <th>NSBA invoice no.</th>
+                <th>Batch U-no.</th>
+                <th style={{ textAlign: 'right' }}>Qty tests</th>
+                <th style={{ textAlign: 'right' }}>Rate/test</th>
+                <th style={{ textAlign: 'right' }}>Total excl. VAT</th>
+                <th>Payment</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}>
-              <td colSpan={3}>Total</td>
-              <td style={{ textAlign: 'right' }}>{totalTests}</td>
-              <td style={{ textAlign: 'right' }}>{fmt(totalAmount)}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {relevant.map((b) => {
+                const breakdown = getOwnerBreakdown(b)
+                const owners = Object.keys(breakdown)
+                const rate = b.rate_per_test
+                const total = b.invoice_amount_payable ? parseFloat(b.invoice_amount_payable) : (rate && b.invoice_test_count ? rate * b.invoice_test_count : null)
+                const isExpanded = expandedBatch === b.id
+                const multiOwner = owners.length > 1
+
+                return (
+                  <>
+                    <tr key={b.id} style={{ borderBottom: isExpanded ? 'none' : undefined }}>
+                      <td>
+                        <div className="row" style={{ gap: 6 }}>
+                          <span>{owners.join(', ') || b.owner}</span>
+                          {multiOwner && (
+                            <button onClick={() => setExpandedBatch(isExpanded ? null : b.id)} style={{ fontSize: 11, padding: '1px 6px' }}>
+                              {isExpanded ? 'Hide split ▲' : 'Show split ▼'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td>{b.invoice_number || <span className="faint">—</span>}</td>
+                      <td>{b.batch_report_number || <span className="faint">—</span>}</td>
+                      <td style={{ textAlign: 'right' }}>{b.invoice_test_count || <span className="faint">—</span>}</td>
+                      <td style={{ textAlign: 'right' }}>{rate ? fmt(rate) : <span className="faint">—</span>}</td>
+                      <td style={{ textAlign: 'right' }}>{total ? fmt(total) : <span className="faint">—</span>}</td>
+                      <td>{b.payment_date ? <span className="badge success">{b.payment_date}</span> : <span className="badge warning">Pending</span>}</td>
+                      <td></td>
+                    </tr>
+                    {isExpanded && multiOwner && Object.entries(breakdown).map(([owner, qty]) => (
+                      <tr key={owner} style={{ background: 'var(--color-accent-light)', fontSize: 12 }}>
+                        <td style={{ paddingLeft: 24 }}>{owner}</td>
+                        <td></td>
+                        <td></td>
+                        <td style={{ textAlign: 'right' }}>{qty}</td>
+                        <td style={{ textAlign: 'right' }}>{rate ? fmt(rate) : '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{rate ? fmt(rate * qty) : '—'}</td>
+                        <td></td>
+                        <td></td>
+                      </tr>
+                    ))}
+                  </>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}>
+                <td colSpan={3}>Total</td>
+                <td style={{ textAlign: 'right' }}>{totalTests}</td>
+                <td></td>
+                <td style={{ textAlign: 'right' }}>{fmt(totalAmount)}</td>
+                <td colSpan={2}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 500 }}>Per owner summary</h2>
+        <p className="muted" style={{ marginBottom: 12 }}>Total DNA tests and cost allocated per owner across all batches.</p>
+        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Owner</th>
+                <th style={{ textAlign: 'right' }}>Total tests</th>
+                <th style={{ textAlign: 'right' }}>Total amount excl. VAT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(ownerTotals).sort().map(([owner, data]) => (
+                <tr key={owner}>
+                  <td><strong>{owner}</strong></td>
+                  <td style={{ textAlign: 'right' }}>{data.qty}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(data.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}>
+                <td>Total</td>
+                <td style={{ textAlign: 'right' }}>{Object.values(ownerTotals).reduce((s, d) => s + d.qty, 0)}</td>
+                <td style={{ textAlign: 'right' }}>{fmt(Object.values(ownerTotals).reduce((s, d) => s + d.amount, 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </div>
   )
