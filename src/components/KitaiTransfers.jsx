@@ -945,9 +945,11 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
       {/* Summary */}
       <div className="card">
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Summary</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>DNA invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaGroups}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
           <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sale invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalSaleInvoices}</div><div className="muted" style={{ fontSize: 11 }}>{totalSaleAnimals} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sales paid</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-success-text)' }}>{filteredInvoices.filter(i => i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sales outstanding</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-warning-text)' }}>{filteredInvoices.filter(i => !i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => !i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
         </div>
       </div>
 
@@ -1067,7 +1069,19 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
                       </div>
                       {isExpanded && (
                         <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-                          <div className="stack" style={{ gap: 4, marginTop: 12, marginBottom: 12 }}>
+                          <div style={{ marginTop: 12, marginBottom: 8 }} className="row">
+                            {invoiceTransfers.some(t => !t.sold_flag) && (
+                              <button className="primary" style={{ fontSize: 12 }} onClick={async () => {
+                                await Promise.all(invoiceTransfers.filter(t => !t.sold_flag).map(t => markSold(t.id)))
+                              }}>Mark all sold</button>
+                            )}
+                            {invoiceTransfers.some(t => t.sold_flag) && (
+                              <button style={{ fontSize: 12 }} onClick={async () => {
+                                await Promise.all(invoiceTransfers.filter(t => t.sold_flag).map(t => markUnsold(t.id)))
+                              }}>Revert all</button>
+                            )}
+                          </div>
+                          <div className="stack" style={{ gap: 4, marginBottom: 12 }}>
                             {invoiceTransfers.map(t => (
                               <div key={t.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-background-secondary)', borderRadius: 6 }}>
                                 <div className="row" style={{ gap: 8 }}><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span><strong>{t.ear_tag}</strong>{t.identity_number && <span className="muted">{t.identity_number}</span>}<span className="muted">{t.owner}</span></div>
