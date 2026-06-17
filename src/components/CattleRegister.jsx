@@ -5,7 +5,6 @@ function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); r
 
 
 const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '' }
-const emptyGeneral  = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: '', mother_id: '', father_id: '' }
 const emptyTransfer = { type: '', date: '', customer: '', invoice_number: '', breed: 'Wagyu', sex: '', date_of_birth: '' }
 
 function sortRecords(records) {
@@ -22,11 +21,8 @@ export default function CattleRegister() {
   const [archived, setArchived] = useState([])
   const [loading,  setLoading]  = useState(true)
   const [bForm, setBForm] = useState(emptyBreeding)
-  const [gForm, setGForm] = useState(emptyGeneral)
   const [bSaving, setBSaving] = useState(false)
-  const [gSaving, setGSaving] = useState(false)
   const [bMsg, setBMsg] = useState('')
-  const [gMsg, setGMsg] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [transferringId, setTransferringId] = useState(null)
@@ -95,18 +91,6 @@ export default function CattleRegister() {
     setBSaving(false)
   }
 
-  async function saveGeneral(e) {
-    e.preventDefault(); setGSaving(true); setGMsg('Saving...')
-    const { error } = await supabase.from('cattle_register').insert({
-      animal_type: 'general', owner: gForm.owner,
-      ear_tag: gForm.ear_tag, identity_number: gForm.identity_number || null,
-      sex: gForm.sex || null, date_of_birth: gForm.date_of_birth || null, breed: gForm.breed || null,
-      mother_id: gForm.mother_id || null, father_id: gForm.father_id || null,
-    })
-    if (error) { setGMsg('Failed: ' + error.message) }
-    else { setGMsg('Saved.'); setGForm(emptyGeneral); load(); setTimeout(() => setGMsg(''), 2500) }
-    setGSaving(false)
-  }
 
   function startEdit(record) {
     setTransferringId(null)
@@ -292,7 +276,7 @@ export default function CattleRegister() {
                 <table>
                   <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th></th></tr></thead>
                   <tbody>
-                    {breeding.map((c) => {
+                    {breeding.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={true} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
@@ -329,21 +313,13 @@ export default function CattleRegister() {
         <SectionHeader title="General cattle register" count={general.length} open={generalOpen} onToggle={() => setGeneralOpen((v) => !v)} sub="Owner-to-ear-tag mapping for all other registered cattle." />
         {generalOpen && (
           <>
-            <form onSubmit={saveGeneral} className="grid-form" style={{ marginBottom: 12 }}>
-              <div><label>Owner *</label><select required value={gForm.owner} onChange={(e) => setGForm((f) => ({ ...f, owner: e.target.value }))}><option value="">Select owner</option>{OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
-              <div><label>Identity number</label><input value={gForm.identity_number} onChange={(e) => setGForm((f) => ({ ...f, identity_number: e.target.value }))} placeholder="optional" /></div>
-              <div><label>Ear tag number *</label><input required value={gForm.ear_tag} onChange={(e) => setGForm((f) => ({ ...f, ear_tag: e.target.value }))} placeholder="e.g. NA12345" /></div>
-              <div style={{ gridColumn: '1 / -1' }} className="row">
-                <button type="submit" className="primary" disabled={gSaving}>Add to register</button>
-                <span className="muted">{gMsg}</span>
-              </div>
-            </form>
+    
             {loading ? null : general.length === 0 ? <p className="muted">No general cattle records yet.</p> : (
               <div style={{ overflowX: 'auto' }}>
                 <table>
                   <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th></th></tr></thead>
                   <tbody>
-                    {general.map((c) => {
+                    {general.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={false} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
