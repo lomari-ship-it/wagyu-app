@@ -99,6 +99,11 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
   const [invoiceDetails, setInvoiceDetails] = useState({ date: '', number: '', amount: '', notes: '' })
   const [creating, setCreating] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [importOwner, setImportOwner] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
+  const [notFound, setNotFound] = useState([])
   const soldIds = new Set(transfers.filter(t => t.sold_flag).map(t => t.animal_id))
   const invoicedCattleIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []).map(id => {
     const t = transfers.find(t => t.id === id)
@@ -118,6 +123,90 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 
   function toggleSelect(id) {
     setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  async function handleKitaiImport(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!importOwner) { setImportMsg('Please select an owner first.'); return }
+    setImporting(true); setImportMsg('Reading file...'); setNotFound([])
+    const text = await file.text()
+    const raw = text.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(l => l.length > 0)
+    if (raw.length < 2) { setImportMsg('Empty file.'); setImporting(false); return }
+    const headers = raw[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, '_'))
+
+    const eidIdx = headers.findIndex(h => h === 'eid')
+    const dateIdx = headers.findIndex(h => h === 'date')
+    const breedIdx = headers.findIndex(h => h.includes('f1') || h.includes('f2'))
+
+    if (eidIdx === -1) { setImportMsg('EID column not found.'); setImporting(false); return }
+
+    function parseDate(d) {
+      if (!d) return null
+      const parts = d.split('/')
+      if (parts.length === 3) return parts[2] + '-' + parts[1].padStart(2,'0') + '-' + parts[0].padStart(2,'0')
+      return d
+    }
+
+    // Parse valid rows
+    const csvAnimals = []
+    for (let i = 1; i < raw.length; i++) {
+      const vals = raw[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const eid = vals[eidIdx]
+      if (!eid) continue
+      let isNum = true
+      for (let c = 0; c < eid.length; c++) { if (eid[c] < '0' || eid[c] > '9') { isNum = false; break } }
+      if (!isNum) continue
+      csvAnimals.push({
+        ear_tag: eid,
+        transfer_date: dateIdx >= 0 ? parseDate(vals[dateIdx]) : null,
+        breed: breedIdx >= 0 ? (vals[breedIdx] || null) : null,
+      })
+    }
+
+    if (csvAnimals.length === 0) { setImportMsg('No valid animal rows found.'); setImporting(false); return }
+
+    // Lookup ear tags in cattle_register (general register)
+    const { data: cattleData } = await supabase.from('cattle_register')
+      .select('id, ear_tag, identity_number, owner, date_of_birth, breed')
+      .in('ear_tag', csvAnimals.map(a => a.ear_tag))
+
+    const cattleMap = {}
+    ;(cattleData || []).forEach(c => { cattleMap[c.ear_tag] = c })
+
+    const found = []
+    const missing = []
+    csvAnimals.forEach(a => {
+      if (cattleMap[a.ear_tag]) {
+        found.push({ ...a, ...cattleMap[a.ear_tag] })
+      } else {
+        missing.push(a)
+      }
+    })
+
+    setNotFound(missing)
+
+    // Check which found animals are already transferred
+    const existingTags = new Set(allKitaiCattle.map(c => c.ear_tag))
+    const toInsert = found.filter(a => !existingTags.has(a.ear_tag))
+
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from('cattle_register').update({
+        archived: true, transfer_type: 'kitai',
+        transfer_date: toInsert[0].transfer_date,
+        transfer_customer: 'Kitai',
+      }).in('ear_tag', toInsert.map(a => a.ear_tag))
+      if (error) { setImportMsg('Import failed: ' + error.message); setImporting(false); return }
+    }
+
+    const skipped = found.length - toInsert.length
+    const msg = 'Imported ' + toInsert.length + ' animals' +
+      (skipped > 0 ? ', ' + skipped + ' already transferred' : '') +
+      (missing.length > 0 ? '. ' + missing.length + ' ear tag(s) not found in cattle register — see list below.' : '.')
+    setImportMsg(msg)
+    setImporting(false)
+    if (toInsert.length > 0) { setShowImport(false); onReload() }
+    e.target.value = ''
   }
 
   async function createInvoiceFromSelection() {
@@ -188,6 +277,63 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
           </div>
         )}
       </div>
+
+      {/* CSV Import */}
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: showImport ? 12 : 0 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Import transfers from CSV</h2>
+          <button onClick={() => setShowImport(v => !v)}>{showImport ? 'Cancel' : 'Import CSV'}</button>
+        </div>
+        {showImport && (
+          <div style={{ marginTop: 8 }}>
+            <p className="muted" style={{ fontSize: 12, margin: '0 0 10px' }}>
+              Accepts the weighing/transfer CSV format with EID, VID, Date, F1/F2 columns. Summary rows are automatically skipped.
+            </p>
+            <div className="row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 10 }}>
+              <div>
+                <label>Owner *</label>
+                <select value={importOwner} onChange={e => setImportOwner(e.target.value)} style={{ width: 200 }}>
+                  <option value="">Select owner</option>
+                  <option value="J.A Delport">J.A Delport</option>
+                  <option value="J.H.T Delport">J.H.T Delport</option>
+                  <option value="D.B Delport">D.B Delport</option>
+                </select>
+              </div>
+              <div>
+                <label>CSV file</label>
+                <input type="file" accept=".csv" disabled={importing || !importOwner} onChange={handleKitaiImport} style={{ fontSize: 13 }} />
+              </div>
+            </div>
+            {importMsg && <p className="muted" style={{ fontSize: 12, margin: 0 }}>{importMsg}</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Not found in register */}
+      {notFound.length > 0 && (
+        <div className="card" style={{ border: '2px solid var(--color-danger-text)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500, color: 'var(--color-danger-text)' }}>⚠ {notFound.length} ear tag{notFound.length !== 1 ? 's' : ''} not found in cattle register</h2>
+            <button style={{ fontSize: 12 }} onClick={() => setNotFound([])}>Dismiss</button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: '0 0 10px' }}>These ear tags from the CSV were not found in the General cattle register. Please investigate and add them manually if needed.</p>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead><tr><th>Ear tag (EID)</th><th>Transfer date</th><th>Breed</th><th>Action needed</th></tr></thead>
+              <tbody>
+                {notFound.map((a, i) => (
+                  <tr key={i}>
+                    <td><strong>{a.ear_tag}</strong></td>
+                    <td>{a.transfer_date ? a.transfer_date.split('-').reverse().join('/') : '—'}</td>
+                    <td>{a.breed || '—'}</td>
+                    <td><span className="badge warning">Not in register</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* All transferred */}
       <CollapsibleCard title="All cattle transferred to Kitai" count={allKitaiCattle.length} countLabel="animal" defaultOpen={true}>
@@ -316,6 +462,7 @@ function DnaTab({ transfers, batches, calves, getDnaCost, allKitaiCattle, invoic
   function toggleSelect(id) {
     setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
+
 
   async function createInvoiceFromSelection() {
     if (selected.size === 0) return
@@ -495,6 +642,7 @@ function SalesTab({ saleInvoices, transfers, onReload }) {
   function toggleSelect(id) {
     setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
+
 
   async function createInvoiceFromSelection() {
     if (selected.size === 0) return
