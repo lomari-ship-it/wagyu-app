@@ -146,6 +146,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [notFound, setNotFound] = useState([])
+  const [importPreview, setImportPreview] = useState(null)  // { toInsert, alreadyTransferred, notFound }
   const allCattleToShow = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
   const soldIds = new Set(transfers.filter(t => t.sold_flag).map(t => t.animal_id))
   const invoicedCattleIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []).map(id => {
