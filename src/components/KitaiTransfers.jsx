@@ -111,9 +111,9 @@ export default function KitaiTransfers() {
   return (
     <div className="stack" style={{ gap: 24 }}>
       <div className="row" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: 12 }}>
-        {['cattle', 'dna', 'sales'].map(t => (
+        {['cattle', 'dna', 'invoices'].map(t => (
           <button key={t} className={tab === t ? 'primary' : ''} onClick={() => setTab(t)}>
-            {t === 'cattle' ? 'Cattle transfers' : t === 'dna' ? 'DNA cost recovery' : 'Sale invoices'}
+            {t === 'cattle' ? 'Cattle transfers' : t === 'dna' ? 'DNA cost recovery' : 'Invoices'}
           </button>
         ))}
       </div>
