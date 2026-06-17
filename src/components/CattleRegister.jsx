@@ -161,7 +161,6 @@ export default function CattleRegister() {
       <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', marginBottom: open ? 12 : 0 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>{title}</h2>
-          {sub && <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>{sub}</p>}
         </div>
         <div className="row" style={{ gap: 12 }}>
           <span className="muted">{count} record{count !== 1 ? 's' : ''}</span>

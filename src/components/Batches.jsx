@@ -23,6 +23,7 @@ export default function Batches() {
   const [selectedCalfIds, setSelectedCalfIds] = useState(new Set())
   const [creating, setCreating] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
+  const [unbatchedOpen, setUnbatchedOpen] = useState(true)
   const [calfSearch, setCalfSearch] = useState('')
 
   useEffect(() => { loadAll() }, [])
@@ -97,13 +98,24 @@ export default function Batches() {
 
   return (
     <div className="stack" style={{ gap: 24 }}>
-      <div className="card">
-        <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Create birth notification batch</h2>
-        <div style={{ marginBottom: 12 }}>
+      <div className="card" style={{ padding: 0 }}>
+        <div
+          onClick={() => setUnbatchedOpen(v => !v)}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
+        >
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Create birth notification batch</h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className="muted">{filteredCalves.length} unbatched calf{filteredCalves.length !== 1 ? 'ves' : ''}</span>
+            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: unbatchedOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+          </div>
+        </div>
+        {unbatchedOpen && <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+        <div style={{ marginTop: 12, marginBottom: 12 }}>
           <input
             type="text"
             value={calfSearch}
-            onChange={(e) => setCalfSearch(e.target.value)}
+            onChange={(e) => { e.stopPropagation(); setCalfSearch(e.target.value) }}
+            onClick={(e) => e.stopPropagation()}
             placeholder="Search by ear tag or identity number..."
             style={{ width: '100%', maxWidth: 360 }}
           />
@@ -114,7 +126,7 @@ export default function Batches() {
           <>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
               <span className="muted">{filteredCalves.length} calf entr{filteredCalves.length !== 1 ? 'ies' : 'y'} shown &middot; {selectedCalfIds.size} selected</span>
-              <button onClick={selectAll} style={{ fontSize: 13 }}>{filteredCalves.every((c) => selectedCalfIds.has(c.id)) ? 'Deselect all' : 'Select all'}</button>
+              <button onClick={(e) => { e.stopPropagation(); selectAll() }} style={{ fontSize: 13 }}>{filteredCalves.every((c) => selectedCalfIds.has(c.id)) ? 'Deselect all' : 'Select all'}</button>
             </div>
             <div className="stack" style={{ gap: 6, marginBottom: 12 }}>
               {filteredCalves.map((c) => (
@@ -132,6 +144,7 @@ export default function Batches() {
             </div>
           </>
         )}
+        </div>}
       </div>
 
       <div>

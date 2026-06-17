@@ -121,6 +121,7 @@ export default function KitaiTransfers() {
 
 function DnaRecovery({ transfers, eligibleCalves, eligibleCattle, getDnaCost, onAdd, onUpdate, onDelete }) {
   const [statusFilter, setStatusFilter] = useState('all')
+  const [eligibleOpen, setEligibleOpen] = useState(true)
 
   const totalDna = transfers.reduce((s, t) => s + (parseFloat(t.dna_cost_recoverable) || 0), 0)
   const pendingDna = transfers.filter(t => t.invoice_status === 'pending').reduce((s, t) => s + (parseFloat(t.dna_cost_recoverable) || 0), 0)
@@ -173,9 +174,19 @@ function DnaRecovery({ transfers, eligibleCalves, eligibleCattle, getDnaCost, on
       </div>
 
       {(eligibleCalves.length > 0 || eligibleCattle.length > 0) && (
-        <div className="card">
-          <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 500 }}>Animals transferred to Kitai — not yet tracked</h2>
-          <div className="stack" style={{ gap: 6 }}>
+        <div className="card" style={{ padding: 0 }}>
+          <div
+            onClick={() => setEligibleOpen(v => !v)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
+          >
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Animals transferred to Kitai — not yet tracked</h2>
+            <div className="row" style={{ gap: 12 }}>
+              <span className="muted">{eligibleCalves.length + eligibleCattle.length} animal{eligibleCalves.length + eligibleCattle.length !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: eligibleOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+            </div>
+          </div>
+          {eligibleOpen && <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+          <div className="stack" style={{ gap: 6, marginTop: 12 }}>
             {eligibleCalves.map(c => (
               <div key={c.id} className="row" style={{ justifyContent: 'space-between', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8 }}>
                 <div>
@@ -200,6 +211,7 @@ function DnaRecovery({ transfers, eligibleCalves, eligibleCattle, getDnaCost, on
               </div>
             ))}
           </div>
+          </div>}
         </div>
       )}
 
