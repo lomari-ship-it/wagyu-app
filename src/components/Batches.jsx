@@ -245,22 +245,40 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
   const hasDiscrepancy = testCount > 0 && calfCount > 0 && testCount !== calfCount
 
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <div>
-          <div className="row" style={{ marginBottom: 4 }}>
-            <strong>
-              {batch.submission_date ? formatDate(batch.submission_date) : 'No submission date'}
-              {batch.invoice_number ? ` · ${batch.invoice_number}` : ''}
-              {` · ${summaries.length} calves`}
-            </strong>
-          </div>
+    <div className="card" style={{ padding: 0 }}>
 
-          <div style={{ marginTop: 4 }}>
-            <button
-              onClick={() => setCalvesOpen((v) => !v)}
-              style={{ fontSize: 12, padding: '2px 8px', background: 'var(--color-accent-light)', border: '1px solid var(--color-border)', borderRadius: 6 }}
-            >
+      {/* Clickable header */}
+      <div
+        onClick={() => setBatchOpen(v => !v)}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
+      >
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            {batch.submission_date ? formatDate(batch.submission_date) : 'No submission date'}
+            {batch.invoice_number ? ` · ${batch.invoice_number}` : ''}
+            {` · ${summaries.length} calves`}
+            {hasDiscrepancy && (
+              <span style={{ color: 'var(--color-danger-text)', fontSize: 12, marginLeft: 8 }}>
+                ⚠ {calfCount} calves vs {testCount} tests invoiced
+              </span>
+            )}
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            <span className={`badge ${isPending ? 'warning' : 'success'}`}>{isPending ? 'Pending' : 'Submitted'}</span>
+            <span className={`badge ${hasInvoice ? 'success' : 'warning'}`}>{hasInvoice ? 'Invoice received' : 'Invoice pending'}</span>
+            <span className={`badge ${isPaid ? 'success' : 'warning'}`}>{isPaid ? 'Paid' : 'Payment pending'}</span>
+          </div>
+        </div>
+        <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: batchOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+      </div>
+
+      {/* Collapsible content */}
+      {batchOpen && (
+        <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+
+          {/* Calves toggle */}
+          <div style={{ marginTop: 12, marginBottom: 8 }}>
+            <button onClick={() => setCalvesOpen(v => !v)} style={{ fontSize: 12, padding: '2px 8px', background: 'var(--color-accent-light)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
               {calvesOpen ? 'Hide calves ▲' : `Show ${summaries.length} calves ▼`}
             </button>
             {calvesOpen && (
@@ -273,85 +291,84 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
               </div>
             )}
           </div>
-        </div>
 
-
-      {/* Submission */}
-      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
-        <div className="muted" style={{ fontWeight: 500, marginBottom: 6, fontSize: 12 }}>Submission</div>
-        <div className="row">
-          <div>
-            <label>Submission date</label>
-            <input type="date" defaultValue={batch.submission_date || ''} onBlur={(e) => onUpdate(batch.id, 'submission_date', e.target.value)} />
-          </div>
-          <div>
-            <label>Batch Detail Report U-number</label>
-            <input style={{ width: 150 }} defaultValue={batch.batch_report_number || ''} onBlur={(e) => onUpdate(batch.id, 'batch_report_number', e.target.value)} placeholder="e.g. U12345" />
-          </div>
-        </div>
-      </div>
-
-      {/* Invoice */}
-      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
-        <div className="muted" style={{ fontWeight: 500, marginBottom: 6, fontSize: 12 }}>NSBA invoice</div>
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          <div>
-            <label>Invoice date</label>
-            <input type="date" defaultValue={batch.invoice_date || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_date', e.target.value)} />
-          </div>
-          <div>
-            <label>Invoice number</label>
-            <input style={{ width: 140 }} defaultValue={batch.invoice_number || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_number', e.target.value)} placeholder="e.g. INV-1234" />
-          </div>
-          <div>
-            <label>No. of tests invoiced</label>
-            <input type="number" min="0" style={{ width: 100 }} defaultValue={batch.invoice_test_count || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_test_count', e.target.value ? parseInt(e.target.value) : null)} />
-          </div>
-          <div>
-            <label>Rate per test (N$)</label>
-            <div className="row" style={{ gap: 4, alignItems: 'center' }}>
-              <input type="number" min="0" step="0.01" style={{ width: 120 }} defaultValue={batch.rate_per_test || ''} onBlur={(e) => onUpdate(batch.id, 'rate_per_test', e.target.value ? parseFloat(e.target.value) : null)} placeholder="e.g. 241.00" />
-              {batch.rate_per_test && batch.invoice_test_count && (
-                <span className="muted" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
-                  = {fmtCurrency(batch.rate_per_test * batch.invoice_test_count)} total
-                </span>
-              )}
+          {/* Submission */}
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+            <div className="muted" style={{ fontWeight: 500, marginBottom: 6, fontSize: 12 }}>Submission</div>
+            <div className="row">
+              <div>
+                <label>Submission date</label>
+                <input type="date" defaultValue={batch.submission_date || ''} onBlur={(e) => onUpdate(batch.id, 'submission_date', e.target.value)} />
+              </div>
+              <div>
+                <label>Batch Detail Report U-number</label>
+                <input style={{ width: 150 }} defaultValue={batch.batch_report_number || ''} onBlur={(e) => onUpdate(batch.id, 'batch_report_number', e.target.value)} placeholder="e.g. U12345" />
+              </div>
             </div>
           </div>
-          <div>
-            <label>Payment date</label>
-            <input type="date" defaultValue={batch.payment_date || ''} onBlur={(e) => onUpdate(batch.id, 'payment_date', e.target.value)} />
+
+          {/* Invoice */}
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+            <div className="muted" style={{ fontWeight: 500, marginBottom: 6, fontSize: 12 }}>NSBA invoice</div>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <div>
+                <label>Invoice date</label>
+                <input type="date" defaultValue={batch.invoice_date || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_date', e.target.value)} />
+              </div>
+              <div>
+                <label>Invoice number</label>
+                <input style={{ width: 140 }} defaultValue={batch.invoice_number || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_number', e.target.value)} placeholder="e.g. INV-1234" />
+              </div>
+              <div>
+                <label>No. of tests invoiced</label>
+                <input type="number" min="0" style={{ width: 100 }} defaultValue={batch.invoice_test_count || ''} onBlur={(e) => onUpdate(batch.id, 'invoice_test_count', e.target.value ? parseInt(e.target.value) : null)} />
+              </div>
+              <div>
+                <label>Rate per test (N$)</label>
+                <div className="row" style={{ gap: 4, alignItems: 'center' }}>
+                  <input type="number" min="0" step="0.01" style={{ width: 120 }} defaultValue={batch.rate_per_test || ''} onBlur={(e) => onUpdate(batch.id, 'rate_per_test', e.target.value ? parseFloat(e.target.value) : null)} placeholder="e.g. 241.00" />
+                  {batch.rate_per_test && batch.invoice_test_count && (
+                    <span className="muted" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                      = {fmtCurrency(batch.rate_per_test * batch.invoice_test_count)} total
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label>Payment date</label>
+                <input type="date" defaultValue={batch.payment_date || ''} onBlur={(e) => onUpdate(batch.id, 'payment_date', e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Documents */}
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+            <div className="muted" style={{ fontWeight: 500, marginBottom: 8, fontSize: 12 }}>Documents</div>
+            <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
+              <FileUploadField
+                label="Batch Detail Report (Unistel)"
+                fileName={batch.batch_report_file_name}
+                fileUrl={batch.batch_report_file_url}
+                fieldName="batch_report"
+                batchId={batch.id}
+                onReload={onReload}
+              />
+              <FileUploadField
+                label="NSBA invoice"
+                fileName={batch.invoice_file_name}
+                fileUrl={batch.invoice_file_url}
+                fieldName="invoice"
+                batchId={batch.id}
+                onReload={onReload}
+              />
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+            <button className="primary" onClick={() => generateBook(batch, calves)}>Generate birth notification</button>
           </div>
         </div>
-      </div>
-
-      {/* Documents */}
-      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
-        <div className="muted" style={{ fontWeight: 500, marginBottom: 8, fontSize: 12 }}>Documents</div>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
-          <FileUploadField
-            label="Batch Detail Report (Unistel)"
-            fileName={batch.batch_report_file_name}
-            fileUrl={batch.batch_report_file_url}
-            fieldName="batch_report"
-            batchId={batch.id}
-            onReload={onReload}
-          />
-          <FileUploadField
-            label="NSBA invoice"
-            fileName={batch.invoice_file_name}
-            fileUrl={batch.invoice_file_url}
-            fieldName="invoice"
-            batchId={batch.id}
-            onReload={onReload}
-          />
-        </div>
-      </div>
-
-      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
-        <button className="primary" onClick={() => generateBook(batch, calves)}>Generate birth notification</button>
-      </div>
-      </div>}
+      )}
     </div>
   )
 }
