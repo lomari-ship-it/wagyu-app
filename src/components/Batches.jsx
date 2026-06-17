@@ -245,8 +245,15 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div>
           <div className="row" style={{ marginBottom: 4 }}>
-            <strong>{[...new Set(summaries.map(s => s.owner || batch.owner).filter(Boolean))].join(', ') || batch.owner}</strong>
-            <span className="muted">&mdash; {summaries.length} calves</span>
+            <strong>
+              {batch.submission_date ? formatDate(batch.submission_date) : 'No submission date'}
+              {batch.invoice_number ? ` · ${batch.invoice_number}` : ''}
+              {` · ${summaries.length} calves`}
+            </strong>
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {[...new Set(summaries.map(s => s.owner || batch.owner).filter(Boolean))].join(', ') || batch.owner}
+            {' · Created '}{new Date(batch.created_at).toLocaleDateString('en-GB')}
           </div>
           <div style={{ marginTop: 4 }}>
             <button
@@ -265,7 +272,6 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
               </div>
             )}
           </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Created {new Date(batch.created_at).toLocaleDateString("en-GB")}</div>
         </div>
         <div className="stack" style={{ gap: 4, alignItems: 'flex-end' }}>
           <span className={`badge ${isPending ? 'warning' : 'success'}`}>{isPending ? 'Pending' : 'Submitted'}</span>
