@@ -130,7 +130,7 @@ export default function KitaiTransfers() {
 
       {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
       {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
-      {tab === 'sales' && <SalesTab saleInvoices={saleInvoices} transfers={transfers} search={globalSearch} onReload={loadAll} />}
+      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} search={globalSearch} onReload={loadAll} />}
     </div>
   )
 }
@@ -832,21 +832,37 @@ function InvoiceFileUpload({ inv, onReload }) {
 }
 
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
-function SalesTab({ saleInvoices, transfers, search, onReload }) {
+function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
   const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
+  const filteredDnaInvoiced = search ? transfers.filter(t => t.invoice_status === 'invoiced' && (t.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : transfers.filter(t => t.invoice_status === 'invoiced')
+
   const [selectedIds, setSelectedIds] = useState(new Set())
-  const [newInvoice, setNewInvoice] = useState({ date: '', number: '', amount: '', notes: '' })
+  const [newInvoice, setNewInvoice] = useState({ date: '', number: '', notes: '' })
+  const [newInvoiceFile, setNewInvoiceFile] = useState(null)
+  const newInvoiceFileRef = useRef()
   const [creating, setCreating] = useState(false)
   const [createMsg, setCreateMsg] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [expandedInvoice, setExpandedInvoice] = useState(null)
+  const [dnaOpen, setDnaOpen] = useState(true)
+  const [salesOpen, setSalesOpen] = useState(true)
 
   const invoicedIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []))
   const unsold = transfers.filter(t => !t.sold_flag && !invoicedIds.has(t.id))
 
-  const totalInvoiced = saleInvoices.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
-  const totalPaid = saleInvoices.filter(i => i.payment_date).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
-  const totalPending = totalInvoiced - totalPaid
+  // DNA cost recovery grouped by invoice number
+  const dnaByInvoice = {}
+  filteredDnaInvoiced.forEach(t => {
+    const key = t.invoice_number || 'No invoice number'
+    if (!dnaByInvoice[key]) dnaByInvoice[key] = { number: t.invoice_number, date: t.invoice_date, animals: [], total: 0 }
+    dnaByInvoice[key].animals.push(t)
+  })
+
+  // Summary totals
+  const totalSaleInvoices = filteredInvoices.length
+  const totalDnaGroups = Object.keys(dnaByInvoice).length
+  const totalSaleAnimals = filteredInvoices.reduce((s, i) => s + (i.animal_summaries||[]).length, 0)
+  const totalDnaAnimals = filteredDnaInvoiced.length
 
   function toggleSelect(id) {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
@@ -856,15 +872,22 @@ function SalesTab({ saleInvoices, transfers, search, onReload }) {
     if (selectedIds.size === 0) { setCreateMsg('Select at least one animal.'); return }
     setCreating(true); setCreateMsg('Creating...')
     const selected = transfers.filter(t => selectedIds.has(t.id))
-    const { error } = await supabase.from('kitai_sale_invoices').insert({
+    const { data: inserted, error } = await supabase.from('kitai_sale_invoices').insert({
       invoice_date: newInvoice.date || null, invoice_number: newInvoice.number || null,
-      amount: newInvoice.amount ? parseFloat(newInvoice.amount) : null,
       notes: newInvoice.notes || null, animal_ids: Array.from(selectedIds),
       animal_summaries: selected.map(t => ({ id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number, owner: t.owner, animalType: t.animal_type })),
-    })
+    }).select().single()
     if (error) { setCreateMsg('Failed: ' + error.message); setCreating(false); return }
+    if (inserted && newInvoiceFile) {
+      const path = 'kitai/' + inserted.id + '/' + newInvoiceFile.name
+      const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, newInvoiceFile, { upsert: true })
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
+        await supabase.from('kitai_sale_invoices').update({ invoice_file_name: newInvoiceFile.name, invoice_file_url: urlData.publicUrl }).eq('id', inserted.id)
+      }
+    }
     setCreateMsg('Invoice created.')
-    setSelectedIds(new Set()); setNewInvoice({ date: '', number: '', amount: '', notes: '' }); setShowForm(false)
+    setSelectedIds(new Set()); setNewInvoice({ date: '', number: '', notes: '' }); setNewInvoiceFile(null); setShowForm(false)
     onReload(); setTimeout(() => setCreateMsg(''), 2500); setCreating(false)
   }
 
@@ -873,171 +896,156 @@ function SalesTab({ saleInvoices, transfers, search, onReload }) {
   async function updateInvoice(id, updates) { await supabase.from('kitai_sale_invoices').update(updates).eq('id', id); onReload() }
   async function deleteInvoice(id) { await supabase.from('kitai_sale_invoices').delete().eq('id', id); onReload() }
 
-  function toggleSelect(id) {
-    setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
-  }
-
-
-  async function createInvoiceFromSelection() {
-    if (selected.size === 0) return
-    setCreating(true)
-    // Find or create kitai_transfers records for selected cattle
-    const selectedCattle = allKitaiCattle.filter(c => selected.has(c.id))
-    const existingTransfers = transfers.filter(t => selected.has(t.animal_id))
-    const existingAnimalIds = new Set(existingTransfers.map(t => t.animal_id))
-
-    // Add missing cattle to transfers first
-    for (const c of selectedCattle) {
-      if (!existingAnimalIds.has(c.id)) {
-        await supabase.from('kitai_transfers').insert({
-          animal_type: 'cattle', animal_id: c.id, owner: c.owner,
-          ear_tag: c.ear_tag, identity_number: c.identity_number || null,
-          birth_date: c.date_of_birth || null, transfer_date: c.transfer_date || null,
-          invoice_status: 'pending', sold_flag: false,
-        })
-      }
-    }
-
-    // Reload transfers to get fresh IDs
-    const { data: freshTransfers } = await supabase.from('kitai_transfers').select('*').in('animal_id', Array.from(selected))
-    const transferIds = (freshTransfers || []).map(t => t.id)
-
-    const { error } = await supabase.from('kitai_sale_invoices').insert({
-      invoice_date: invoiceDetails.date || null,
-      invoice_number: invoiceDetails.number || null,
-      notes: invoiceDetails.notes || null,
-      animal_ids: transferIds,
-      animal_summaries: (freshTransfers || []).map(t => ({
-        id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number,
-        owner: t.owner, animalType: t.animal_type
-      })),
-    })
-    if (error) { alert('Failed: ' + error.message) }
-    else {
-      // Upload file if selected
-      if (invoiceFile) {
-        const { data: invData } = await supabase.from('kitai_sale_invoices').select('id').order('created_at', { ascending: false }).limit(1).single()
-        if (invData) {
-          const path = 'kitai/' + invData.id + '/' + invoiceFile.name
-          const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, invoiceFile, { upsert: true })
-          if (!upErr) {
-            const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
-            await supabase.from('kitai_sale_invoices').update({ invoice_file_name: invoiceFile.name, invoice_file_url: urlData.publicUrl }).eq('id', invData.id)
-          }
-        }
-      }
-      setSelected(new Set())
-      setShowInvoiceForm(false)
-      setInvoiceDetails({ date: '', number: '', notes: '' })
-      setInvoiceFile(null)
-      onReload()
-    }
-    setCreating(false)
-  }
-
   return (
     <div className="stack" style={{ gap: 16 }}>
+
       {/* Summary */}
       <div className="card">
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Summary</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Total invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{saleInvoices.length}</div></div>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Total invoiced</div><div style={{ fontSize: 22, fontWeight: 500 }}>{fmtCurrency(totalInvoiced)}</div></div>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Paid</div><div style={{ fontSize: 22, fontWeight: 500, color: 'var(--color-success-text)' }}>{fmtCurrency(totalPaid)}</div></div>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Payment pending</div><div style={{ fontSize: 22, fontWeight: 500, color: 'var(--color-warning-text)' }}>{fmtCurrency(totalPending)}</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>DNA invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaGroups}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sale invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalSaleInvoices}</div><div className="muted" style={{ fontSize: 11 }}>{totalSaleAnimals} animals</div></div>
         </div>
       </div>
 
-      {/* New invoice */}
-      <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: showForm ? 12 : 0 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Kitai sale invoices</h2>
-          <button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : 'New sale invoice'}</button>
+      {/* DNA Cost Recovery Invoices */}
+      <div className="card" style={{ padding: 0 }}>
+        <div onClick={() => setDnaOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>DNA cost recovery</h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className="muted">{totalDnaGroups} invoice{totalDnaGroups !== 1 ? 's' : ''} · {totalDnaAnimals} animals</span>
+            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: dnaOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+          </div>
         </div>
-        {showForm && (
-          <>
-            <div className="row" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
-              <div><label>Invoice date</label><input type="date" value={newInvoice.date} onChange={e => setNewInvoice(f => ({ ...f, date: e.target.value }))} /></div>
-              <div><label>Invoice number</label><input style={{ width: 140 }} value={newInvoice.number} onChange={e => setNewInvoice(f => ({ ...f, number: e.target.value }))} placeholder="e.g. KIT-001" /></div>
-              <div><label>Total amount (N$)</label><input type="number" min="0" step="0.01" style={{ width: 140 }} value={newInvoice.amount} onChange={e => setNewInvoice(f => ({ ...f, amount: e.target.value }))} /></div>
-              <div><label>Notes</label><input style={{ width: 200 }} value={newInvoice.notes} onChange={e => setNewInvoice(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
+        {dnaOpen && (
+          totalDnaGroups === 0 ? <p className="muted" style={{ padding: '0 16px 12px' }}>No DNA invoices yet. Mark transfers as invoiced in the DNA cost recovery tab.</p> : (
+            <div style={{ borderTop: '1px solid var(--color-border)' }}>
+              {Object.entries(dnaByInvoice).map(([key, group]) => (
+                <div key={key} style={{ borderBottom: '1px solid var(--color-border)', padding: '10px 16px' }}>
+                  <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                    <strong>{group.number || 'No invoice number'}</strong>
+                    <span className="muted" style={{ fontSize: 12 }}>{group.animals.length} animals · {formatDate(group.date)}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '2px 12px' }}>
+                    {group.animals.map((t, i) => (
+                      <div key={t.id} className="muted" style={{ fontSize: 12 }}>
+                        {i + 1}. {t.ear_tag} {t.identity_number ? '// ' + t.identity_number : ''} — {t.owner}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="muted">{unsold.length} animals available</span>
-              <button style={{ fontSize: 13 }} onClick={() => { const allSelected = unsold.every(t => selectedIds.has(t.id)); setSelectedIds(allSelected ? new Set() : new Set(unsold.map(t => t.id))) }}>{unsold.every(t => selectedIds.has(t.id)) ? 'Deselect all' : 'Select all'}</button>
-            </div>
-            {unsold.length === 0 ? <p className="muted">No animals available — all are already on a sale invoice.</p> : (
-              <div className="stack" style={{ gap: 4, marginBottom: 12 }}>
-                {unsold.map(t => (
-                  <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedIds.has(t.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
-                    <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} style={{ width: 'auto' }} />
-                    <span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span>
-                    <strong>{t.ear_tag}</strong>
-                    {t.identity_number && <span className="muted">{t.identity_number}</span>}
-                    <span className="muted">{t.owner}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-            <div className="row">
-              <button className="primary" disabled={creating || selectedIds.size === 0} onClick={createInvoice}>Create invoice ({selectedIds.size} animals)</button>
-              <span className="muted">{createMsg}</span>
-            </div>
-          </>
+          )
         )}
       </div>
 
-      {/* Invoice list */}
-      {filteredInvoices.length === 0 ? <p className="muted">No sale invoices{search ? ' matching "' + search + '"' : ''} yet.</p> : (
-        <div className="stack">
-          {filteredInvoices.map(inv => {
-            const summaries = inv.animal_summaries || []
-            const isPaid = !!inv.payment_date
-            const isExpanded = expandedInvoice === inv.id
-            const invoiceTransfers = transfers.filter(t => (inv.animal_ids || []).includes(t.id))
-            return (
-              <div key={inv.id} className="card" style={{ padding: 0 }}>
-                <div onClick={() => setExpandedInvoice(isExpanded ? null : inv.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+      {/* Cattle Sales Invoices */}
+      <div className="card" style={{ padding: 0 }}>
+        <div onClick={() => setSalesOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Cattle sales</h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className="muted">{totalSaleInvoices} invoice{totalSaleInvoices !== 1 ? 's' : ''} · {totalSaleAnimals} animals</span>
+            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: salesOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+          </div>
+        </div>
+        {salesOpen && (
+          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+            {/* New invoice form */}
+            <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, marginBottom: showForm ? 12 : 0 }}>
+              <span className="muted" style={{ fontSize: 13 }}>{unsold.length} animals available to invoice</span>
+              <button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : 'New sale invoice'}</button>
+            </div>
+            {showForm && (
+              <>
+                <div className="row" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
+                  <div><label>Invoice date</label><input type="date" value={newInvoice.date} onChange={e => setNewInvoice(f => ({ ...f, date: e.target.value }))} /></div>
+                  <div><label>Invoice number</label><input style={{ width: 140 }} value={newInvoice.number} onChange={e => setNewInvoice(f => ({ ...f, number: e.target.value }))} placeholder="e.g. KIT-001" /></div>
+                  <div><label>Notes</label><input style={{ width: 160 }} value={newInvoice.notes} onChange={e => setNewInvoice(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
                   <div>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{inv.invoice_number || 'No invoice number'} · {summaries.length} animals{inv.amount ? ` · ${fmtCurrency(inv.amount)}` : ''}</div>
+                    <label>Invoice document</label>
+                    <input ref={newInvoiceFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={e => setNewInvoiceFile(e.target.files[0] || null)} />
                     <div className="row" style={{ gap: 6 }}>
-                      <span className={`badge ${isPaid ? 'success' : 'warning'}`}>{isPaid ? 'Paid' : 'Payment pending'}</span>
-                      {inv.invoice_date && <span className="muted" style={{ fontSize: 12 }}>{formatDate(inv.invoice_date)}</span>}
+                      <button style={{ fontSize: 12 }} onClick={() => newInvoiceFileRef.current.click()}>{newInvoiceFile ? newInvoiceFile.name : 'Upload file'}</button>
+                      {newInvoiceFile && <button className="danger-text" style={{ fontSize: 12 }} onClick={() => setNewInvoiceFile(null)}>Remove</button>}
                     </div>
                   </div>
-                  <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
                 </div>
-                {isExpanded && (
-                  <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-                    <div className="stack" style={{ gap: 4, marginTop: 12, marginBottom: 12 }}>
-                      {invoiceTransfers.map(t => (
-                        <div key={t.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-background-secondary)', borderRadius: 6 }}>
-                          <div className="row" style={{ gap: 8 }}><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span><strong>{t.ear_tag}</strong>{t.identity_number && <span className="muted">{t.identity_number}</span>}<span className="muted">{t.owner}</span></div>
-                          <div className="row" style={{ gap: 6 }}>
-                            <span className={`badge ${t.sold_flag ? 'success' : 'warning'}`}>{t.sold_flag ? 'Sold' : 'Pending sale'}</span>
-                            {!t.sold_flag ? <button className="primary" style={{ fontSize: 11 }} onClick={() => markSold(t.id)}>Mark sold</button> : <button style={{ fontSize: 11 }} onClick={() => markUnsold(t.id)}>Revert</button>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
-                      <div className="row" style={{ flexWrap: 'wrap' }}>
-                        <div><label>Invoice date</label><input type="date" defaultValue={inv.invoice_date || ''} onBlur={e => updateInvoice(inv.id, { invoice_date: e.target.value || null })} /></div>
-                        <div><label>Invoice number</label><input style={{ width: 140 }} defaultValue={inv.invoice_number || ''} onBlur={e => updateInvoice(inv.id, { invoice_number: e.target.value || null })} /></div>
-                        <div><label>Payment date</label><input type="date" defaultValue={inv.payment_date || ''} onBlur={e => updateInvoice(inv.id, { payment_date: e.target.value || null })} /></div>
-                      </div>
-                    </div>
-                    <InvoiceFileUpload inv={inv} onReload={onReload} />
-                    <div style={{ marginTop: 8 }}>
-                      <button className="danger-text" onClick={() => deleteInvoice(inv.id)}>Delete invoice</button>
-                    </div>
+                {unsold.length === 0 ? <p className="muted">No animals available.</p> : (
+                  <div className="stack" style={{ gap: 4, marginBottom: 12 }}>
+                    {unsold.map(t => (
+                      <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedIds.has(t.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
+                        <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} style={{ width: 'auto' }} />
+                        <span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span>
+                        <strong>{t.ear_tag}</strong>
+                        {t.identity_number && <span className="muted">{t.identity_number}</span>}
+                        <span className="muted">{t.owner}</span>
+                      </label>
+                    ))}
                   </div>
                 )}
+                <div className="row">
+                  <button className="primary" disabled={creating || selectedIds.size === 0} onClick={createInvoice}>Create invoice ({selectedIds.size} animals)</button>
+                  <span className="muted">{createMsg}</span>
+                </div>
+              </>
+            )}
+
+            {/* Invoice list */}
+            {filteredInvoices.length === 0 ? <p className="muted" style={{ marginTop: 8 }}>No sale invoices yet.</p> : (
+              <div className="stack" style={{ marginTop: 12 }}>
+                {filteredInvoices.map(inv => {
+                  const summaries = inv.animal_summaries || []
+                  const isPaid = !!inv.payment_date
+                  const isExpanded = expandedInvoice === inv.id
+                  const invoiceTransfers = transfers.filter(t => (inv.animal_ids || []).includes(t.id))
+                  return (
+                    <div key={inv.id} className="card" style={{ padding: 0 }}>
+                      <div onClick={() => setExpandedInvoice(isExpanded ? null : inv.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, marginBottom: 4 }}>{inv.invoice_number || 'No invoice number'} · {summaries.length} animals</div>
+                          <div className="row" style={{ gap: 6 }}>
+                            <span className={`badge ${isPaid ? 'success' : 'warning'}`}>{isPaid ? 'Paid' : 'Payment pending'}</span>
+                            {inv.invoice_date && <span className="muted" style={{ fontSize: 12 }}>{formatDate(inv.invoice_date)}</span>}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+                      </div>
+                      {isExpanded && (
+                        <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+                          <div className="stack" style={{ gap: 4, marginTop: 12, marginBottom: 12 }}>
+                            {invoiceTransfers.map(t => (
+                              <div key={t.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-background-secondary)', borderRadius: 6 }}>
+                                <div className="row" style={{ gap: 8 }}><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span><strong>{t.ear_tag}</strong>{t.identity_number && <span className="muted">{t.identity_number}</span>}<span className="muted">{t.owner}</span></div>
+                                <div className="row" style={{ gap: 6 }}>
+                                  {!t.sold_flag ? <button className="primary" style={{ fontSize: 11 }} onClick={() => markSold(t.id)}>Mark sold</button> : <button style={{ fontSize: 11 }} onClick={() => markUnsold(t.id)}>Revert</button>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+                            <div className="row" style={{ flexWrap: 'wrap' }}>
+                              <div><label>Invoice date</label><input type="date" defaultValue={inv.invoice_date || ''} onBlur={e => updateInvoice(inv.id, { invoice_date: e.target.value || null })} /></div>
+                              <div><label>Invoice number</label><input style={{ width: 140 }} defaultValue={inv.invoice_number || ''} onBlur={e => updateInvoice(inv.id, { invoice_number: e.target.value || null })} /></div>
+                              <div><label>Payment date</label><input type="date" defaultValue={inv.payment_date || ''} onBlur={e => updateInvoice(inv.id, { payment_date: e.target.value || null })} /></div>
+                            </div>
+                          </div>
+                          <InvoiceFileUpload inv={inv} onReload={onReload} />
+                          <div style={{ marginTop: 8 }}>
+                            <button className="danger-text" onClick={() => deleteInvoice(inv.id)}>Delete invoice</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
+
+
