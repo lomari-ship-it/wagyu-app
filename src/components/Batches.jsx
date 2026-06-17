@@ -251,10 +251,7 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
               {` · ${summaries.length} calves`}
             </strong>
           </div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            {[...new Set(summaries.map(s => s.owner || batch.owner).filter(Boolean))].join(', ') || batch.owner}
-            {' · Created '}{new Date(batch.created_at).toLocaleDateString('en-GB')}
-          </div>
+
           <div style={{ marginTop: 4 }}>
             <button
               onClick={() => setCalvesOpen((v) => !v)}
