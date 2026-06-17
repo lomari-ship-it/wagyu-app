@@ -12,6 +12,7 @@ const emptyForm = {
 export default function CalfRegistration() {
   const [form, setForm] = useState(emptyForm)
   const [calves, setCalves] = useState([])
+  const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
@@ -114,6 +115,11 @@ export default function CalfRegistration() {
   }
 
   async function deleteCalf(id) {
+    const inBatch = batches.some(b => (b.calf_ids || []).includes(id))
+    const msg = inBatch
+      ? 'This calf is already included in a batch. Deleting it will not affect the batch record, but the birth notification xlsx may be incomplete for this animal. Are you sure you want to delete?'
+      : 'Are you sure you want to delete this calf entry? This cannot be undone.'
+    if (!window.confirm(msg)) return
     await supabase.from('calves').delete().eq('id', id)
     loadCalves()
   }

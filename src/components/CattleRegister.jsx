@@ -152,6 +152,7 @@ export default function CattleRegister() {
   }
 
   async function deleteRecord(id) {
+    if (!window.confirm('Are you sure you want to delete this record? This cannot be undone.')) return
     await supabase.from('cattle_register').delete().eq('id', id)
     load()
   }
