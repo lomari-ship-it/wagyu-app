@@ -95,6 +95,10 @@ export default function KitaiTransfers() {
 
 // ─── CATTLE TRANSFERS TAB ───────────────────────────────────────────────────
 function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedTransferIds, onReload }) {
+  const [selected, setSelected] = useState(new Set())
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
+  const [invoiceDetails, setInvoiceDetails] = useState({ date: '', number: '', amount: '', notes: '' })
+  const [creating, setCreating] = useState(false)
   const soldIds = new Set(transfers.filter(t => t.sold_flag).map(t => t.animal_id))
   const invoicedCattleIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []).map(id => {
     const t = transfers.find(t => t.id === id)
@@ -111,6 +115,55 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
     if (soldIds.has(c.id) || invoicedCattleIds.has(c.id)) byOwner[c.owner].sold++
     else byOwner[c.owner].pending++
   })
+
+  function toggleSelect(id) {
+    setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  async function createInvoiceFromSelection() {
+    if (selected.size === 0) return
+    setCreating(true)
+    // Find or create kitai_transfers records for selected cattle
+    const selectedCattle = allKitaiCattle.filter(c => selected.has(c.id))
+    const existingTransfers = transfers.filter(t => selected.has(t.animal_id))
+    const existingAnimalIds = new Set(existingTransfers.map(t => t.animal_id))
+
+    // Add missing cattle to transfers first
+    for (const c of selectedCattle) {
+      if (!existingAnimalIds.has(c.id)) {
+        await supabase.from('kitai_transfers').insert({
+          animal_type: 'cattle', animal_id: c.id, owner: c.owner,
+          ear_tag: c.ear_tag, identity_number: c.identity_number || null,
+          birth_date: c.date_of_birth || null, transfer_date: c.transfer_date || null,
+          invoice_status: 'pending', sold_flag: false,
+        })
+      }
+    }
+
+    // Reload transfers to get fresh IDs
+    const { data: freshTransfers } = await supabase.from('kitai_transfers').select('*').in('animal_id', Array.from(selected))
+    const transferIds = (freshTransfers || []).map(t => t.id)
+
+    const { error } = await supabase.from('kitai_sale_invoices').insert({
+      invoice_date: invoiceDetails.date || null,
+      invoice_number: invoiceDetails.number || null,
+      amount: invoiceDetails.amount ? parseFloat(invoiceDetails.amount) : null,
+      notes: invoiceDetails.notes || null,
+      animal_ids: transferIds,
+      animal_summaries: (freshTransfers || []).map(t => ({
+        id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number,
+        owner: t.owner, animalType: t.animal_type
+      })),
+    })
+    if (error) { alert('Failed: ' + error.message) }
+    else {
+      setSelected(new Set())
+      setShowInvoiceForm(false)
+      setInvoiceDetails({ date: '', number: '', amount: '', notes: '' })
+      onReload()
+    }
+    setCreating(false)
+  }
 
   return (
     <div className="stack" style={{ gap: 16 }}>
@@ -139,41 +192,64 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
       {/* All transferred */}
       <CollapsibleCard title="All cattle transferred to Kitai" count={allKitaiCattle.length} countLabel="animal" defaultOpen={true}>
         {allKitaiCattle.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No cattle transferred to Kitai yet.</p> : (
-          <div style={{ overflowX: 'auto', marginTop: 12 }}>
+          <>
+          <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, marginBottom: 8 }}>
+            <button style={{ fontSize: 12 }} onClick={() => {
+              const unsoldIds = allKitaiCattle.filter(c => !soldIds.has(c.id) && !invoicedCattleIds.has(c.id)).map(c => c.id)
+              const allSel = unsoldIds.every(id => selected.has(id))
+              setSelected(allSel ? new Set() : new Set(unsoldIds))
+            }}>
+              {allKitaiCattle.filter(c => !soldIds.has(c.id) && !invoicedCattleIds.has(c.id)).every(c => selected.has(c.id)) ? 'Deselect all' : 'Select all unsold'}
+            </button>
+            {selected.size > 0 && (
+              <button className="primary" style={{ fontSize: 12 }} onClick={() => setShowInvoiceForm(v => !v)}>
+                {showInvoiceForm ? 'Cancel' : `Create invoice for ${selected.size} selected`}
+              </button>
+            )}
+          </div>
+
+          {showInvoiceForm && (
+            <div style={{ padding: 12, background: 'var(--color-accent-light)', borderRadius: 8, marginBottom: 12 }}>
+              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+                <div><label>Invoice date</label><input type="date" value={invoiceDetails.date} onChange={e => setInvoiceDetails(f => ({ ...f, date: e.target.value }))} /></div>
+                <div><label>Invoice number</label><input style={{ width: 140 }} value={invoiceDetails.number} onChange={e => setInvoiceDetails(f => ({ ...f, number: e.target.value }))} placeholder="e.g. KIT-001" /></div>
+                <div><label>Amount (N$)</label><input type="number" min="0" step="0.01" style={{ width: 130 }} value={invoiceDetails.amount} onChange={e => setInvoiceDetails(f => ({ ...f, amount: e.target.value }))} /></div>
+                <div><label>Notes</label><input style={{ width: 180 }} value={invoiceDetails.notes} onChange={e => setInvoiceDetails(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
+              </div>
+              <button className="primary" disabled={creating} onClick={createInvoiceFromSelection}>
+                Confirm — create invoice ({selected.size} animals)
+              </button>
+            </div>
+          )}
+
+          <div style={{ overflowX: 'auto' }}>
             <table>
-              <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Transfer date</th><th>Status</th></tr></thead>
+              <thead><tr><th></th><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Transfer date</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                {allKitaiCattle.map(c => (
-                  <tr key={c.id}>
-                    <td>{c.owner}</td>
-                    <td>{c.identity_number || <span className="faint">—</span>}</td>
-                    <td><strong>{c.ear_tag}</strong></td>
-                    <td>{formatDate(c.transfer_date)}</td>
-                    <td>{soldIds.has(c.id) || invoicedCattleIds.has(c.id) ? <span className="badge success">Sold / invoiced</span> : <span className="badge warning">Pending sale</span>}</td>
-                  </tr>
-                ))}
+                {allKitaiCattle.map(c => {
+                  const isSold = soldIds.has(c.id) || invoicedCattleIds.has(c.id)
+                  return (
+                    <tr key={c.id}>
+                      <td><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} disabled={isSold} style={{ width: 'auto' }} /></td>
+                      <td>{c.owner}</td>
+                      <td>{c.identity_number || <span className="faint">—</span>}</td>
+                      <td><strong>{c.ear_tag}</strong></td>
+                      <td>{formatDate(c.transfer_date)}</td>
+                      <td>{isSold ? <span className="badge success">Sold / invoiced</span> : <span className="badge warning">Pending sale</span>}</td>
+                      <td>{!isSold && (
+                        <button className="primary" style={{ fontSize: 11 }} onClick={() => { setSelected(new Set([c.id])); setShowInvoiceForm(true) }}>
+                          Invoice
+                        </button>
+                      )}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
+          </>
         )}
       </CollapsibleCard>
-
-      {/* Pending sale */}
-      <CollapsibleCard title="Transfers pending sale" count={pendingCattle.length} countLabel="animal">
-        {pendingCattle.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No transfers pending sale.</p> : (
-          <div style={{ overflowX: 'auto', marginTop: 12 }}>
-            <table>
-              <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Transfer date</th></tr></thead>
-              <tbody>
-                {pendingCattle.map(c => (
-                  <tr key={c.id}><td>{c.owner}</td><td>{c.identity_number || <span className="faint">—</span>}</td><td><strong>{c.ear_tag}</strong></td><td>{formatDate(c.transfer_date)}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CollapsibleCard>
-
       {/* Sales from transfers */}
       <CollapsibleCard title="Sales from transfers" count={soldCattle.length} countLabel="animal">
         {soldCattle.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No sales recorded yet.</p> : (
@@ -236,6 +312,55 @@ function DnaTab({ transfers, batches, calves, getDnaCost, allKitaiCattle, invoic
   })
 
   const filtered = statusFilter === 'all' ? transfers : transfers.filter(t => t.invoice_status === statusFilter)
+
+  function toggleSelect(id) {
+    setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  async function createInvoiceFromSelection() {
+    if (selected.size === 0) return
+    setCreating(true)
+    // Find or create kitai_transfers records for selected cattle
+    const selectedCattle = allKitaiCattle.filter(c => selected.has(c.id))
+    const existingTransfers = transfers.filter(t => selected.has(t.animal_id))
+    const existingAnimalIds = new Set(existingTransfers.map(t => t.animal_id))
+
+    // Add missing cattle to transfers first
+    for (const c of selectedCattle) {
+      if (!existingAnimalIds.has(c.id)) {
+        await supabase.from('kitai_transfers').insert({
+          animal_type: 'cattle', animal_id: c.id, owner: c.owner,
+          ear_tag: c.ear_tag, identity_number: c.identity_number || null,
+          birth_date: c.date_of_birth || null, transfer_date: c.transfer_date || null,
+          invoice_status: 'pending', sold_flag: false,
+        })
+      }
+    }
+
+    // Reload transfers to get fresh IDs
+    const { data: freshTransfers } = await supabase.from('kitai_transfers').select('*').in('animal_id', Array.from(selected))
+    const transferIds = (freshTransfers || []).map(t => t.id)
+
+    const { error } = await supabase.from('kitai_sale_invoices').insert({
+      invoice_date: invoiceDetails.date || null,
+      invoice_number: invoiceDetails.number || null,
+      amount: invoiceDetails.amount ? parseFloat(invoiceDetails.amount) : null,
+      notes: invoiceDetails.notes || null,
+      animal_ids: transferIds,
+      animal_summaries: (freshTransfers || []).map(t => ({
+        id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number,
+        owner: t.owner, animalType: t.animal_type
+      })),
+    })
+    if (error) { alert('Failed: ' + error.message) }
+    else {
+      setSelected(new Set())
+      setShowInvoiceForm(false)
+      setInvoiceDetails({ date: '', number: '', amount: '', notes: '' })
+      onReload()
+    }
+    setCreating(false)
+  }
 
   return (
     <div className="stack" style={{ gap: 16 }}>
@@ -366,6 +491,55 @@ function SalesTab({ saleInvoices, transfers, onReload }) {
   async function markUnsold(transferId) { await supabase.from('kitai_transfers').update({ sold_flag: false }).eq('id', transferId); onReload() }
   async function updateInvoice(id, updates) { await supabase.from('kitai_sale_invoices').update(updates).eq('id', id); onReload() }
   async function deleteInvoice(id) { await supabase.from('kitai_sale_invoices').delete().eq('id', id); onReload() }
+
+  function toggleSelect(id) {
+    setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  async function createInvoiceFromSelection() {
+    if (selected.size === 0) return
+    setCreating(true)
+    // Find or create kitai_transfers records for selected cattle
+    const selectedCattle = allKitaiCattle.filter(c => selected.has(c.id))
+    const existingTransfers = transfers.filter(t => selected.has(t.animal_id))
+    const existingAnimalIds = new Set(existingTransfers.map(t => t.animal_id))
+
+    // Add missing cattle to transfers first
+    for (const c of selectedCattle) {
+      if (!existingAnimalIds.has(c.id)) {
+        await supabase.from('kitai_transfers').insert({
+          animal_type: 'cattle', animal_id: c.id, owner: c.owner,
+          ear_tag: c.ear_tag, identity_number: c.identity_number || null,
+          birth_date: c.date_of_birth || null, transfer_date: c.transfer_date || null,
+          invoice_status: 'pending', sold_flag: false,
+        })
+      }
+    }
+
+    // Reload transfers to get fresh IDs
+    const { data: freshTransfers } = await supabase.from('kitai_transfers').select('*').in('animal_id', Array.from(selected))
+    const transferIds = (freshTransfers || []).map(t => t.id)
+
+    const { error } = await supabase.from('kitai_sale_invoices').insert({
+      invoice_date: invoiceDetails.date || null,
+      invoice_number: invoiceDetails.number || null,
+      amount: invoiceDetails.amount ? parseFloat(invoiceDetails.amount) : null,
+      notes: invoiceDetails.notes || null,
+      animal_ids: transferIds,
+      animal_summaries: (freshTransfers || []).map(t => ({
+        id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number,
+        owner: t.owner, animalType: t.animal_type
+      })),
+    })
+    if (error) { alert('Failed: ' + error.message) }
+    else {
+      setSelected(new Set())
+      setShowInvoiceForm(false)
+      setInvoiceDetails({ date: '', number: '', amount: '', notes: '' })
+      onReload()
+    }
+    setCreating(false)
+  }
 
   return (
     <div className="stack" style={{ gap: 16 }}>
