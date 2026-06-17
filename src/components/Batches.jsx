@@ -39,7 +39,6 @@ export default function Batches() {
 
   // Collect all calf IDs already in a batch
   const batchedCalfIds = new Set(batches.flatMap((b) => b.calf_ids || []))
-  const filteredCalves = calves.filter((c) => c.owner === owner && !c.sold_flag && !batchedCalfIds.has(c.id))
 
   function toggleCalf(id) {
     setSelectedCalfIds((prev) => {
@@ -58,10 +57,12 @@ export default function Batches() {
     if (!owner || selectedCalfIds.size === 0) return
     setCreating(true); setStatusMsg('Creating batch...')
     const selected = calves.filter((c) => selectedCalfIds.has(c.id))
+    const selected2 = calves.filter((c) => selectedCalfIds.has(c.id))
+    const owners = [...new Set(selected2.map(c => c.owner))].join(', ')
     const { error } = await supabase.from('batches').insert({
-      owner,
+      owner: owners,
       calf_ids: Array.from(selectedCalfIds),
-      calf_summaries: selected.map((c) => ({ id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date })),
+      calf_summaries: selected2.map((c) => ({ id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date })),
     })
     if (error) { setStatusMsg('Failed: ' + error.message) }
     else {
@@ -95,17 +96,20 @@ export default function Batches() {
       <div className="card">
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Create birth notification batch</h2>
         <div style={{ marginBottom: 12 }}>
-          <label>Owner</label>
-          <select value={owner} onChange={(e) => { setOwner(e.target.value); setSelectedCalfIds(new Set()) }} style={{ width: 240 }}>
-            <option value="">Select owner</option>
-            {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
+          <input
+            type="text"
+            value={calfSearch}
+            onChange={(e) => setCalfSearch(e.target.value)}
+            placeholder="Search by ear tag or identity number..."
+            style={{ width: '100%', maxWidth: 360 }}
+          />
         </div>
-        {owner && filteredCalves.length === 0 && <p className="muted">No active calves for {owner}.</p>}
-        {owner && filteredCalves.length > 0 && (
+        {filteredCalves.length === 0 && !calfSearch && <p className="muted">No active calves available (all already batched or none registered).</p>}
+        {filteredCalves.length === 0 && calfSearch && <p className="muted">No calves match "{calfSearch}".</p>}
+        {(filteredCalves.length > 0 || selectedCalfIds.size > 0) && (
           <>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="muted">{filteredCalves.length} calf entries for {owner}</span>
+              <span className="muted">{filteredCalves.length} calf entr{filteredCalves.length !== 1 ? 'ies' : 'y'} shown &middot; {selectedCalfIds.size} selected</span>
               <button onClick={selectAll} style={{ fontSize: 13 }}>{filteredCalves.every((c) => selectedCalfIds.has(c.id)) ? 'Deselect all' : 'Select all'}</button>
             </div>
             <div className="stack" style={{ gap: 6, marginBottom: 12 }}>
