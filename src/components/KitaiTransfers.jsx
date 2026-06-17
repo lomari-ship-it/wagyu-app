@@ -100,7 +100,6 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
   const [invoiceDetails, setInvoiceDetails] = useState({ date: '', number: '', amount: '', notes: '' })
   const [creating, setCreating] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [importOwner, setImportOwner] = useState('')
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [notFound, setNotFound] = useState([])
@@ -128,7 +127,6 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
   async function handleKitaiImport(e) {
     const file = e.target.files[0]
     if (!file) return
-    if (!importOwner) { setImportMsg('Please select an owner first.'); return }
     setImporting(true); setImportMsg('Reading file...'); setNotFound([])
     const text = await file.text()
     const raw = text.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(l => l.length > 0)
@@ -289,20 +287,9 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
             <p className="muted" style={{ fontSize: 12, margin: '0 0 10px' }}>
               Accepts the weighing/transfer CSV format with EID, VID, Date, F1/F2 columns. Summary rows are automatically skipped.
             </p>
-            <div className="row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 10 }}>
-              <div>
-                <label>Owner *</label>
-                <select value={importOwner} onChange={e => setImportOwner(e.target.value)} style={{ width: 200 }}>
-                  <option value="">Select owner</option>
-                  <option value="J.A Delport">J.A Delport</option>
-                  <option value="J.H.T Delport">J.H.T Delport</option>
-                  <option value="D.B Delport">D.B Delport</option>
-                </select>
-              </div>
-              <div>
-                <label>CSV file</label>
-                <input type="file" accept=".csv" disabled={importing || !importOwner} onChange={handleKitaiImport} style={{ fontSize: 13 }} />
-              </div>
+            <div style={{ marginBottom: 10 }}>
+              <label>CSV file</label>
+              <input type="file" accept=".csv" disabled={importing} onChange={handleKitaiImport} style={{ fontSize: 13 }} />
             </div>
             {importMsg && <p className="muted" style={{ fontSize: 12, margin: 0 }}>{importMsg}</p>}
           </div>
