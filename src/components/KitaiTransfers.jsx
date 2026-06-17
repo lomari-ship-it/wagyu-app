@@ -441,6 +441,8 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
   const [invoiceDetails, setInvoiceDetails] = useState({ number: '', date: '', notes: '' })
   const [invoicedOpen, setInvoicedOpen] = useState(false)
+  const [pendingOpen, setPendingOpen] = useState(true)
+  const [allOpen, setAllOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const transferredIds = new Set(transfers.map(t => t.animal_id))
@@ -585,30 +587,28 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
       {/* Transfer records */}
       <div className="stack" style={{ gap: 12 }}>
 
-        {/* Pending — with checkboxes to select for invoicing */}
+        {/* Pending — collapsible with checkboxes */}
         <div className="card" style={{ padding: 0 }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>
-                Pending
-                {selectedForInvoice.size > 0 && <span className="muted" style={{ fontSize: 14, fontWeight: 400, marginLeft: 8 }}>{selectedForInvoice.size} selected</span>}
-              </h2>
-              <div className="row" style={{ gap: 6 }}>
-                {selectedForInvoice.size > 0 && (
-                  <button className="primary" style={{ fontSize: 12 }} onClick={() => setShowInvoiceForm(v => !v)}>
-                    {showInvoiceForm ? 'Cancel' : `Invoice ${selectedForInvoice.size} selected`}
-                  </button>
-                )}
-                <button style={{ fontSize: 12 }} onClick={() => {
-                  const pendingIds = transfers.filter(t => t.invoice_status === 'pending').map(t => t.id)
-                  const allSel = pendingIds.every(id => selectedForInvoice.has(id))
-                  setSelectedForInvoice(allSel ? new Set() : new Set(pendingIds))
-                }}>
-                  {transfers.filter(t => t.invoice_status === 'pending').every(t => selectedForInvoice.has(t.id)) ? 'Deselect all' : 'Select all'}
+          <div onClick={(e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') setPendingOpen(v => !v) }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>
+              Pending
+              {selectedForInvoice.size > 0 && <span className="muted" style={{ fontSize: 14, fontWeight: 400, marginLeft: 8 }}>{selectedForInvoice.size} selected</span>}
+            </h2>
+            <div className="row" style={{ gap: 6 }}>
+              {selectedForInvoice.size > 0 && (
+                <button className="primary" style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); setShowInvoiceForm(v => !v) }}>
+                  {showInvoiceForm ? 'Cancel' : `Invoice ${selectedForInvoice.size} selected`}
                 </button>
-              </div>
+              )}
+              <button style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); const pendingIds = transfers.filter(t => t.invoice_status === 'pending').map(t => t.id); const allSel = pendingIds.every(id => selectedForInvoice.has(id)); setSelectedForInvoice(allSel ? new Set() : new Set(pendingIds)) }}>
+                {transfers.filter(t => t.invoice_status === 'pending').every(t => selectedForInvoice.has(t.id)) ? 'Deselect all' : 'Select all'}
+              </button>
+              <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: pendingOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
             </div>
+          </div>
 
+          {pendingOpen && (
+            <>
             {/* Invoice form */}
             {showInvoiceForm && (
               <div style={{ marginTop: 12, padding: 12, background: 'var(--color-accent-light)', borderRadius: 8 }}>
@@ -634,7 +634,6 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
                 </button>
               </div>
             )}
-          </div>
 
           {transfers.filter(t => t.invoice_status === 'pending').length === 0 ? (
             <p className="muted" style={{ padding: '12px 16px' }}>No pending transfers.</p>
@@ -659,6 +658,44 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
                   })}
                 </tbody>
                 <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={6}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(transfers.filter(t => t.invoice_status === 'pending').reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0), 0))}</td></tr></tfoot>
+              </table>
+            </div>
+          )}
+            </>
+          )}
+        </div>
+
+        {/* All transfers — collapsible */}
+        <div className="card" style={{ padding: 0 }}>
+          <div onClick={() => setAllOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>All transfers</h2>
+            <div className="row" style={{ gap: 12 }}>
+              <span className="muted">{transfers.length} total · {transfers.filter(t => t.invoice_status === 'pending').length} pending · {transfers.filter(t => t.invoice_status === 'invoiced').length} invoiced</span>
+              <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: allOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+            </div>
+          </div>
+          {allOpen && (
+            <div style={{ overflowX: 'auto', borderTop: '1px solid var(--color-border)' }}>
+              <table>
+                <thead><tr><th>Type</th><th>Owner</th><th>Ear tag</th><th>Identity no.</th><th>Transfer date</th><th style={{ textAlign: 'right' }}>DNA recoverable</th><th>Status</th><th>Invoice no.</th></tr></thead>
+                <tbody>
+                  {transfers.map(t => {
+                    const dnaCost = transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0
+                    return (
+                      <tr key={t.id}>
+                        <td><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span></td>
+                        <td>{t.owner}</td>
+                        <td><strong>{t.ear_tag}</strong></td>
+                        <td>{t.identity_number || <span className="faint">—</span>}</td>
+                        <td>{formatDate(t.transfer_date)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtCurrency(dnaCost)}</td>
+                        <td><span className={`badge ${t.invoice_status === 'invoiced' ? 'success' : 'warning'}`}>{t.invoice_status === 'invoiced' ? 'Invoiced' : 'Pending'}</span></td>
+                        <td>{t.invoice_number || <span className="faint">—</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(transfers.reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0), 0))}</td><td colSpan={2}></td></tr></tfoot>
               </table>
             </div>
           )}
