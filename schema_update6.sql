@@ -21,3 +21,7 @@ alter table kitai_transfers add column if not exists sale_invoice_id uuid;
 -- Add file upload columns to kitai_sale_invoices
 alter table kitai_sale_invoices add column if not exists invoice_file_name text;
 alter table kitai_sale_invoices add column if not exists invoice_file_url text;
+
+-- Add CSV/weighbridge file columns to kitai_sale_invoices
+alter table kitai_sale_invoices add column if not exists csv_file_name text;
+alter table kitai_sale_invoices add column if not exists csv_file_url text;

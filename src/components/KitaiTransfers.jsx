@@ -792,41 +792,65 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
 
 function InvoiceFileUpload({ inv, onReload }) {
   const fileRef = useRef()
+  const csvRef = useRef()
   const [uploading, setUploading] = useState(false)
+  const [csvUploading, setCsvUploading] = useState(false)
 
-  async function handleUpload(e) {
+  async function handleUpload(e, field, prefix) {
     const file = e.target.files[0]
     if (!file) return
-    setUploading(true)
-    const path = 'kitai/' + inv.id + '/' + file.name
+    field === 'invoice' ? setUploading(true) : setCsvUploading(true)
+    const path = 'kitai/' + inv.id + '/' + prefix + file.name
     const { error } = await supabase.storage.from('batch-documents').upload(path, file, { upsert: true })
-    if (error) { alert('Upload failed: ' + error.message); setUploading(false); return }
+    if (error) { alert('Upload failed: ' + error.message); setUploading(false); setCsvUploading(false); return }
     const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
-    await supabase.from('kitai_sale_invoices').update({ invoice_file_name: file.name, invoice_file_url: urlData.publicUrl }).eq('id', inv.id)
-    setUploading(false); onReload()
+    const updates = field === 'invoice'
+      ? { invoice_file_name: file.name, invoice_file_url: urlData.publicUrl }
+      : { csv_file_name: file.name, csv_file_url: urlData.publicUrl }
+    await supabase.from('kitai_sale_invoices').update(updates).eq('id', inv.id)
+    setUploading(false); setCsvUploading(false); onReload()
   }
 
-  async function removeFile() {
-    await supabase.from('kitai_sale_invoices').update({ invoice_file_name: null, invoice_file_url: null }).eq('id', inv.id)
+  async function removeFile(field) {
+    const updates = field === 'invoice'
+      ? { invoice_file_name: null, invoice_file_url: null }
+      : { csv_file_name: null, csv_file_url: null }
+    await supabase.from('kitai_sale_invoices').update(updates).eq('id', inv.id)
     onReload()
   }
 
   return (
     <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
-      <label style={{ marginBottom: 4 }}>Invoice document</label>
-      {inv.invoice_file_url ? (
-        <div className="row">
-          <a href={inv.invoice_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {inv.invoice_file_name}</a>
-          <button className="danger-text" style={{ fontSize: 12 }} onClick={removeFile}>Remove</button>
+      <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <label style={{ marginBottom: 4 }}>Invoice document</label>
+          {inv.invoice_file_url ? (
+            <div className="row">
+              <a href={inv.invoice_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {inv.invoice_file_name}</a>
+              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => removeFile('invoice')}>Remove</button>
+            </div>
+          ) : (
+            <div className="row">
+              <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={e => handleUpload(e, 'invoice', '')} />
+              <button disabled={uploading} onClick={() => fileRef.current.click()} style={{ fontSize: 13 }}>{uploading ? 'Uploading...' : 'Upload invoice'}</button>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="row">
-          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleUpload} />
-          <button disabled={uploading} onClick={() => fileRef.current.click()} style={{ fontSize: 13 }}>
-            {uploading ? 'Uploading...' : 'Upload invoice'}
-          </button>
+        <div>
+          <label style={{ marginBottom: 4 }}>Weighbridge / CSV file</label>
+          {inv.csv_file_url ? (
+            <div className="row">
+              <a href={inv.csv_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {inv.csv_file_name}</a>
+              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => removeFile('csv')}>Remove</button>
+            </div>
+          ) : (
+            <div className="row">
+              <input ref={csvRef} type="file" accept=".csv,.pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={e => handleUpload(e, 'csv', 'csv_')} />
+              <button disabled={csvUploading} onClick={() => csvRef.current.click()} style={{ fontSize: 13 }}>{csvUploading ? 'Uploading...' : 'Upload CSV/file'}</button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -840,6 +864,8 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
   const [newInvoice, setNewInvoice] = useState({ date: '', number: '', notes: '' })
   const [newInvoiceFile, setNewInvoiceFile] = useState(null)
   const newInvoiceFileRef = useRef()
+  const newCsvFileRef = useRef()
+  const [newCsvFile, setNewCsvFile] = useState(null)
   const [creating, setCreating] = useState(false)
   const [createMsg, setCreateMsg] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -906,8 +932,10 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
     setCsvNotFound(missing)
     // Pre-select found transfers
     setSelectedIds(new Set(found.map(t => t.id)))
+    // Auto-set the CSV as the weighbridge attachment
+    setNewCsvFile(file)
     setShowForm(true)
-    setCsvMsg(found.length + ' matched' + (missing.length > 0 ? ', ' + missing.length + ' not found in transfer records' : '') + '. Review and confirm below.')
+    setCsvMsg(found.length + ' matched' + (missing.length > 0 ? ', ' + missing.length + ' not found in transfer records' : '') + '. CSV file will be attached to the invoice.')
     e.target.value = ''
   }
 
@@ -929,8 +957,16 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
         await supabase.from('kitai_sale_invoices').update({ invoice_file_name: newInvoiceFile.name, invoice_file_url: urlData.publicUrl }).eq('id', inserted.id)
       }
     }
+    if (inserted && newCsvFile) {
+      const csvPath = 'kitai/' + inserted.id + '/csv_' + newCsvFile.name
+      const { error: csvErr } = await supabase.storage.from('batch-documents').upload(csvPath, newCsvFile, { upsert: true })
+      if (!csvErr) {
+        const { data: csvUrl } = supabase.storage.from('batch-documents').getPublicUrl(csvPath)
+        await supabase.from('kitai_sale_invoices').update({ csv_file_name: newCsvFile.name, csv_file_url: csvUrl.publicUrl }).eq('id', inserted.id)
+      }
+    }
     setCreateMsg('Invoice created.')
-    setSelectedIds(new Set()); setNewInvoice({ date: '', number: '', notes: '' }); setNewInvoiceFile(null); setShowForm(false)
+    setSelectedIds(new Set()); setNewInvoice({ date: '', number: '', notes: '' }); setNewInvoiceFile(null); setNewCsvFile(null); setShowForm(false)
     onReload(); setTimeout(() => setCreateMsg(''), 2500); setCreating(false)
   }
 
@@ -945,11 +981,15 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
       {/* Summary */}
       <div className="card">
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Summary</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>DNA invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaGroups}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sale invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalSaleInvoices}</div><div className="muted" style={{ fontSize: 11 }}>{totalSaleAnimals} animals</div></div>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sales paid</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-success-text)' }}>{filteredInvoices.filter(i => i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Cattle sales outstanding</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-warning-text)' }}>{filteredInvoices.filter(i => !i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => !i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
+        <div className="muted" style={{ fontSize: 11, fontWeight: 500, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DNA cost recovery</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaGroups}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
+        </div>
+        <div className="muted" style={{ fontSize: 11, fontWeight: 500, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cattle sales</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Total invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalSaleInvoices}</div><div className="muted" style={{ fontSize: 11 }}>{totalSaleAnimals} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Paid</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-success-text)' }}>{filteredInvoices.filter(i => i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Outstanding</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-warning-text)' }}>{filteredInvoices.filter(i => !i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => !i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
         </div>
       </div>
 
@@ -1022,8 +1062,16 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
                     <label>Invoice document</label>
                     <input ref={newInvoiceFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={e => setNewInvoiceFile(e.target.files[0] || null)} />
                     <div className="row" style={{ gap: 6 }}>
-                      <button style={{ fontSize: 12 }} onClick={() => newInvoiceFileRef.current.click()}>{newInvoiceFile ? newInvoiceFile.name : 'Upload file'}</button>
-                      {newInvoiceFile && <button className="danger-text" style={{ fontSize: 12 }} onClick={() => setNewInvoiceFile(null)}>Remove</button>}
+                      <button style={{ fontSize: 12 }} onClick={() => newInvoiceFileRef.current.click()}>{newInvoiceFile ? newInvoiceFile.name : 'Upload invoice'}</button>
+                      {newInvoiceFile && <button className="danger-text" style={{ fontSize: 12 }} onClick={() => setNewInvoiceFile(null)}>✕</button>}
+                    </div>
+                  </div>
+                  <div>
+                    <label>Weighbridge / CSV file</label>
+                    <input ref={newCsvFileRef} type="file" accept=".csv,.pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={e => setNewCsvFile(e.target.files[0] || null)} />
+                    <div className="row" style={{ gap: 6 }}>
+                      <button style={{ fontSize: 12 }} onClick={() => newCsvFileRef.current.click()}>{newCsvFile ? newCsvFile.name : 'Upload CSV/file'}</button>
+                      {newCsvFile && <button className="danger-text" style={{ fontSize: 12 }} onClick={() => setNewCsvFile(null)}>✕</button>}
                     </div>
                   </div>
                 </div>
