@@ -40,6 +40,10 @@ export default function Batches() {
 
   // Collect all calf IDs already in a batch
   const batchedCalfIds = new Set(batches.flatMap((b) => b.calf_ids || []))
+  const searchLower = calfSearch.toLowerCase()
+  const filteredCalves = calves.filter((c) => !c.sold_flag && !batchedCalfIds.has(c.id) &&
+    (!calfSearch || (c.ear_tag||'').toLowerCase().includes(searchLower) || (c.identity_number||'').toLowerCase().includes(searchLower))
+  )
 
   function toggleCalf(id) {
     setSelectedCalfIds((prev) => {
