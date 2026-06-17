@@ -301,7 +301,7 @@ export default function CattleRegister() {
                           <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
                           <td>{c.ear_tag}</td>
                           <td>{(!c.sex || c.sex === 'NULL') ? <span className="faint">—</span> : c.sex}</td>
-                          <td>{(!c.date_of_birth || c.date_of_birth === 'NULL') ? <span className="faint">—</span> : c.date_of_birth}</td>
+                          <td>{(!c.date_of_birth || c.date_of_birth === 'NULL') ? <span className="faint">—</span> : formatDate(c.date_of_birth)}</td>
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
@@ -352,7 +352,7 @@ export default function CattleRegister() {
                           <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
                           <td>{c.ear_tag}</td>
                           <td>{(!c.sex || c.sex === 'NULL') ? <span className="faint">—</span> : c.sex}</td>
-                          <td>{(!c.date_of_birth || c.date_of_birth === 'NULL') ? <span className="faint">—</span> : c.date_of_birth}</td>
+                          <td>{(!c.date_of_birth || c.date_of_birth === 'NULL') ? <span className="faint">—</span> : formatDate(c.date_of_birth)}</td>
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
