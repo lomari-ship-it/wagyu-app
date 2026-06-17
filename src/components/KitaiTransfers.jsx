@@ -846,6 +846,10 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
   const [expandedInvoice, setExpandedInvoice] = useState(null)
   const [dnaOpen, setDnaOpen] = useState(true)
   const [salesOpen, setSalesOpen] = useState(true)
+  const [showCsvImport, setShowCsvImport] = useState(false)
+  const [csvMsg, setCsvMsg] = useState('')
+  const [csvNotFound, setCsvNotFound] = useState([])
+  const csvFileRef = useRef()
 
   const invoicedIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []))
   const unsold = transfers.filter(t => !t.sold_flag && !invoicedIds.has(t.id))
@@ -866,6 +870,45 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
 
   function toggleSelect(id) {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  async function handleCsvImport(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setCsvMsg('Reading file...'); setCsvNotFound([])
+    const text = await file.text()
+    const raw = text.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(l => l.length > 0)
+    if (raw.length < 2) { setCsvMsg('Empty file.'); return }
+    const headers = raw[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, '_'))
+    const eidIdx = headers.findIndex(h => h === 'eid')
+    const dateIdx = headers.findIndex(h => h === 'date')
+    if (eidIdx === -1) { setCsvMsg('EID column not found.'); return }
+
+    const csvEarTags = []
+    for (let i = 1; i < raw.length; i++) {
+      const vals = raw[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const eid = vals[eidIdx]
+      if (!eid) continue
+      let isNum = true
+      for (let c = 0; c < eid.length; c++) { if (eid[c] < '0' || eid[c] > '9') { isNum = false; break } }
+      if (!isNum) continue
+      csvEarTags.push(eid)
+    }
+
+    if (csvEarTags.length === 0) { setCsvMsg('No valid EID rows found.'); return }
+    setCsvMsg('Matching ' + csvEarTags.length + ' animals to transfers...')
+
+    // Match against existing transfers by ear tag
+    const found = transfers.filter(t => csvEarTags.includes(t.ear_tag))
+    const foundTags = new Set(found.map(t => t.ear_tag))
+    const missing = csvEarTags.filter(tag => !foundTags.has(tag))
+
+    setCsvNotFound(missing)
+    // Pre-select found transfers
+    setSelectedIds(new Set(found.map(t => t.id)))
+    setShowForm(true)
+    setCsvMsg(found.length + ' matched' + (missing.length > 0 ? ', ' + missing.length + ' not found in transfer records' : '') + '. Review and confirm below.')
+    e.target.value = ''
   }
 
   async function createInvoice() {
@@ -954,8 +997,19 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
             {/* New invoice form */}
             <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, marginBottom: showForm ? 12 : 0 }}>
               <span className="muted" style={{ fontSize: 13 }}>{unsold.length} animals available to invoice</span>
-              <button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : 'New sale invoice'}</button>
+              <div className="row" style={{ gap: 6 }}>
+                <input ref={csvFileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
+                <button style={{ fontSize: 12 }} onClick={() => { setShowForm(true); csvFileRef.current.click() }}>Import from CSV</button>
+                <button onClick={() => { setShowForm(v => !v); setCsvMsg(''); setCsvNotFound([]) }}>{showForm ? 'Cancel' : 'New sale invoice'}</button>
+              </div>
             </div>
+            {csvMsg && <p className="muted" style={{ fontSize: 12, margin: '4px 0' }}>{csvMsg}</p>}
+            {csvNotFound.length > 0 && (
+              <div style={{ padding: 10, background: 'var(--color-danger-bg)', borderRadius: 8, marginBottom: 8 }}>
+                <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--color-danger-text)', marginBottom: 4 }}>⚠ {csvNotFound.length} ear tag{csvNotFound.length !== 1 ? 's' : ''} not found in transfer records:</div>
+                <div className="muted" style={{ fontSize: 12 }}>{csvNotFound.join(', ')}</div>
+              </div>
+            )}
             {showForm && (
               <>
                 <div className="row" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
