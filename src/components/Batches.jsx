@@ -235,10 +235,14 @@ async function generateBook(batch, calves) {
 
 function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
   const [calvesOpen, setCalvesOpen] = useState(false)
+  const [batchOpen, setBatchOpen] = useState(false)
   const summaries = batch.calf_summaries || []
   const isPending = !batch.submission_date || !batch.batch_report_number
   const hasInvoice = batch.invoice_number || batch.invoice_date
   const isPaid = !!batch.payment_date
+  const testCount = batch.invoice_test_count || 0
+  const calfCount = summaries.length
+  const hasDiscrepancy = testCount > 0 && calfCount > 0 && testCount !== calfCount
 
   return (
     <div className="card">
@@ -270,12 +274,7 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
             )}
           </div>
         </div>
-        <div className="stack" style={{ gap: 4, alignItems: 'flex-end' }}>
-          <span className={`badge ${isPending ? 'warning' : 'success'}`}>{isPending ? 'Pending' : 'Submitted'}</span>
-          <span className={`badge ${hasInvoice ? 'success' : 'warning'}`}>{hasInvoice ? 'Invoice received' : 'Invoice pending'}</span>
-          <span className={`badge ${isPaid ? 'success' : 'warning'}`}>{isPaid ? 'Paid' : 'Payment pending'}</span>
-        </div>
-      </div>
+
 
       {/* Submission */}
       <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
@@ -349,10 +348,10 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
         </div>
       </div>
 
-      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }} className="row">
+      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
         <button className="primary" onClick={() => generateBook(batch, calves)}>Generate birth notification</button>
-        <button className="danger-text" onClick={() => onDelete(batch.id)}>Delete batch</button>
       </div>
+      </div>}
     </div>
   )
 }
