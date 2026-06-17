@@ -4,8 +4,7 @@ import { supabase } from '../lib/supabase'
 function fmtCurrency(val) {
   const n = parseFloat(val)
   if (isNaN(n) || n === 0) return '—'
-  const parts = n.toFixed(2).split('.')
-  return 'N$' + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '-' + parts[1]
+  return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function formatDate(d) {
@@ -438,6 +437,11 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, onReload }) {
   const [eligibleOpen, setEligibleOpen] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedForInvoice, setSelectedForInvoice] = useState(new Set())
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
+  const [invoiceDetails, setInvoiceDetails] = useState({ number: '', date: '', notes: '' })
+  const [invoicedOpen, setInvoicedOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const transferredIds = new Set(transfers.map(t => t.animal_id))
   const eligibleCattle = allKitaiCattle.filter(c => !transferredIds.has(c.id))
@@ -579,45 +583,127 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
       )}
 
       {/* Transfer records */}
-      <div>
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Transfer records</h2>
-          <div className="row" style={{ gap: 6 }}>
-            {['all', 'pending', 'invoiced'].map(s => (
-              <button key={s} className={statusFilter === s ? 'primary' : ''} style={{ fontSize: 12 }} onClick={() => setStatusFilter(s)}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-            ))}
+      <div className="stack" style={{ gap: 12 }}>
+
+        {/* Pending — with checkboxes to select for invoicing */}
+        <div className="card" style={{ padding: 0 }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>
+                Pending
+                {selectedForInvoice.size > 0 && <span className="muted" style={{ fontSize: 14, fontWeight: 400, marginLeft: 8 }}>{selectedForInvoice.size} selected</span>}
+              </h2>
+              <div className="row" style={{ gap: 6 }}>
+                {selectedForInvoice.size > 0 && (
+                  <button className="primary" style={{ fontSize: 12 }} onClick={() => setShowInvoiceForm(v => !v)}>
+                    {showInvoiceForm ? 'Cancel' : `Invoice ${selectedForInvoice.size} selected`}
+                  </button>
+                )}
+                <button style={{ fontSize: 12 }} onClick={() => {
+                  const pendingIds = transfers.filter(t => t.invoice_status === 'pending').map(t => t.id)
+                  const allSel = pendingIds.every(id => selectedForInvoice.has(id))
+                  setSelectedForInvoice(allSel ? new Set() : new Set(pendingIds))
+                }}>
+                  {transfers.filter(t => t.invoice_status === 'pending').every(t => selectedForInvoice.has(t.id)) ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+            </div>
+
+            {/* Invoice form */}
+            {showInvoiceForm && (
+              <div style={{ marginTop: 12, padding: 12, background: 'var(--color-accent-light)', borderRadius: 8 }}>
+                <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div><label>Invoice number</label><input style={{ width: 140 }} value={invoiceDetails.number} onChange={e => setInvoiceDetails(f => ({ ...f, number: e.target.value }))} placeholder="e.g. INV-001" /></div>
+                  <div><label>Invoice date</label><input type="date" value={invoiceDetails.date} onChange={e => setInvoiceDetails(f => ({ ...f, date: e.target.value }))} /></div>
+                  <div><label>Notes</label><input style={{ width: 200 }} value={invoiceDetails.notes} onChange={e => setInvoiceDetails(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
+                </div>
+                <button className="primary" disabled={submitting || !invoiceDetails.number || !invoiceDetails.date} onClick={async () => {
+                  setSubmitting(true)
+                  const ids = Array.from(selectedForInvoice)
+                  await Promise.all(ids.map(id => updateTransfer(id, {
+                    invoice_status: 'invoiced',
+                    invoice_number: invoiceDetails.number,
+                    invoice_date: invoiceDetails.date,
+                  })))
+                  setSelectedForInvoice(new Set())
+                  setShowInvoiceForm(false)
+                  setInvoiceDetails({ number: '', date: '', notes: '' })
+                  setSubmitting(false)
+                }}>
+                  Confirm — mark {selectedForInvoice.size} as invoiced
+                </button>
+              </div>
+            )}
           </div>
+
+          {transfers.filter(t => t.invoice_status === 'pending').length === 0 ? (
+            <p className="muted" style={{ padding: '12px 16px' }}>No pending transfers.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead><tr><th></th><th>Type</th><th>Owner</th><th>Ear tag</th><th>Identity no.</th><th>Transfer date</th><th style={{ textAlign: 'right' }}>DNA recoverable</th></tr></thead>
+                <tbody>
+                  {transfers.filter(t => t.invoice_status === 'pending').map(t => {
+                    const dnaCost = transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0
+                    return (
+                      <tr key={t.id} style={{ background: selectedForInvoice.has(t.id) ? 'var(--color-accent-light)' : undefined }}>
+                        <td><input type="checkbox" checked={selectedForInvoice.has(t.id)} onChange={() => setSelectedForInvoice(prev => { const next = new Set(prev); next.has(t.id) ? next.delete(t.id) : next.add(t.id); return next })} style={{ width: 'auto' }} /></td>
+                        <td><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span></td>
+                        <td>{t.owner}</td>
+                        <td><strong>{t.ear_tag}</strong></td>
+                        <td>{t.identity_number || <span className="faint">—</span>}</td>
+                        <td>{formatDate(t.transfer_date)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtCurrency(dnaCost)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={6}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(transfers.filter(t => t.invoice_status === 'pending').reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0), 0))}</td></tr></tfoot>
+              </table>
+            </div>
+          )}
         </div>
-        {filtered.length === 0 ? <p className="muted">No transfer records yet.</p> : (
-          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-            <table>
-              <thead><tr><th>Type</th><th>Owner</th><th>Ear tag</th><th>Identity no.</th><th>Transfer date</th><th style={{ textAlign: 'right' }}>DNA recoverable</th><th>Invoice status</th><th>Invoice no.</th><th></th></tr></thead>
-              <tbody>
-                {filtered.map(t => (
-                  <tr key={t.id}>
-                    <td><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span></td>
-                    <td>{t.owner}</td>
-                    <td><strong>{t.ear_tag}</strong></td>
-                    <td>{t.identity_number || <span className="faint">—</span>}</td>
-                    <td>{formatDate(t.transfer_date)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtCurrency(transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || t.dna_cost_recoverable)}</td>
-                    <td><span className={`badge ${t.invoice_status === 'invoiced' ? 'success' : 'warning'}`}>{t.invoice_status === 'invoiced' ? 'Invoiced' : 'Pending'}</span></td>
-                    <td>{t.invoice_status === 'invoiced' ? <span style={{ fontSize: 13 }}>{t.invoice_number || <span className="faint">—</span>}</span> : <input style={{ width: 120, fontSize: 12 }} defaultValue={t.invoice_number || ''} placeholder="Invoice no." onBlur={e => updateTransfer(t.id, { invoice_number: e.target.value || null })} />}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-                        {t.invoice_status === 'pending' ? <button className="primary" style={{ fontSize: 12 }} onClick={() => updateTransfer(t.id, { invoice_status: 'invoiced', invoice_date: new Date().toISOString().slice(0, 10) })}>Mark invoiced</button> : <button style={{ fontSize: 12 }} onClick={() => updateTransfer(t.id, { invoice_status: 'pending', invoice_date: null })}>Revert</button>}
-                        <button className="danger-text" onClick={() => deleteTransfer(t.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(filtered.reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || parseFloat(t.dna_cost_recoverable) || 0), 0))}</td><td colSpan={3}></td></tr></tfoot>
-            </table>
+
+        {/* Invoiced — collapsible */}
+        <div className="card" style={{ padding: 0 }}>
+          <div onClick={() => setInvoicedOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Invoiced</h2>
+            <div className="row" style={{ gap: 12 }}>
+              <span className="muted">{transfers.filter(t => t.invoice_status === 'invoiced').length} records</span>
+              <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: invoicedOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+            </div>
           </div>
-        )}
+          {invoicedOpen && (
+            transfers.filter(t => t.invoice_status === 'invoiced').length === 0 ? (
+              <p className="muted" style={{ padding: '0 16px 12px' }}>No invoiced transfers yet.</p>
+            ) : (
+              <div style={{ overflowX: 'auto', borderTop: '1px solid var(--color-border)' }}>
+                <table>
+                  <thead><tr><th>Type</th><th>Owner</th><th>Ear tag</th><th>Identity no.</th><th>Transfer date</th><th style={{ textAlign: 'right' }}>DNA recoverable</th><th>Invoice no.</th><th>Invoice date</th><th></th></tr></thead>
+                  <tbody>
+                    {transfers.filter(t => t.invoice_status === 'invoiced').map(t => {
+                      const dnaCost = transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0
+                      return (
+                        <tr key={t.id}>
+                          <td><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span></td>
+                          <td>{t.owner}</td>
+                          <td><strong>{t.ear_tag}</strong></td>
+                          <td>{t.identity_number || <span className="faint">—</span>}</td>
+                          <td>{formatDate(t.transfer_date)}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtCurrency(dnaCost)}</td>
+                          <td>{t.invoice_number || <span className="faint">—</span>}</td>
+                          <td>{formatDate(t.invoice_date)}</td>
+                          <td><button style={{ fontSize: 11 }} onClick={() => updateTransfer(t.id, { invoice_status: 'pending', invoice_number: null, invoice_date: null })}>Revert</button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(transfers.filter(t => t.invoice_status === 'invoiced').reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0), 0))}</td><td colSpan={3}></td></tr></tfoot>
+                </table>
+              </div>
+            )
+          )}
+        </div>
       </div>
     </div>
   )

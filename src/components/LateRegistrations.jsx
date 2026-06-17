@@ -22,9 +22,8 @@ function LateTag({ days }) {
 
 function fmtCurrency(val) {
   const n = parseFloat(val)
-  if (isNaN(n)) return '—'
-  const parts = n.toFixed(2).split('.')
-  return 'N$' + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '-' + parts[1]
+  if (isNaN(n) || n === 0) return '—'
+  return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export default function LateRegistrations() {

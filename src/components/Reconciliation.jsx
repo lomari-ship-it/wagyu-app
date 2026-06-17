@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 function fmt(val) {
   const n = parseFloat(val)
   if (isNaN(n)) return '—'
-  return 'N$ ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export default function Reconciliation() {

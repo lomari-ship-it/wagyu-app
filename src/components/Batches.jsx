@@ -8,12 +8,10 @@ const BUCKET = 'batch-documents'
 
 function fmtCurrency(val) {
   const n = parseFloat(val)
-  if (isNaN(n)) return '—'
-  // Format as N$0,000-00
-  const parts = n.toFixed(2).split('.')
-  const thousands = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return `N$${thousands}-${parts[1]}`
+  if (isNaN(n) || n === 0) return '—'
+  return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
 
 export default function Batches() {
   const [batches, setBatches] = useState([])
