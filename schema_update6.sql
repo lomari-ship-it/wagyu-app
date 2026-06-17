@@ -17,3 +17,7 @@ create policy "Allow authenticated full access" on kitai_sale_invoices
 -- Add sold_flag and sale_invoice_id to kitai_transfers
 alter table kitai_transfers add column if not exists sold_flag boolean default false;
 alter table kitai_transfers add column if not exists sale_invoice_id uuid;
+
+-- Add file upload columns to kitai_sale_invoices
+alter table kitai_sale_invoices add column if not exists invoice_file_name text;
+alter table kitai_sale_invoices add column if not exists invoice_file_url text;

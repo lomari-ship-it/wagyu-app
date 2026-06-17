@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 function fmtCurrency(val) {
@@ -278,7 +278,6 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
     const { error } = await supabase.from('kitai_sale_invoices').insert({
       invoice_date: invoiceDetails.date || null,
       invoice_number: invoiceDetails.number || null,
-      amount: invoiceDetails.amount ? parseFloat(invoiceDetails.amount) : null,
       notes: invoiceDetails.notes || null,
       animal_ids: transferIds,
       animal_summaries: (freshTransfers || []).map(t => ({
@@ -288,9 +287,22 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
     })
     if (error) { alert('Failed: ' + error.message) }
     else {
+      // Upload file if selected
+      if (invoiceFile) {
+        const { data: invData } = await supabase.from('kitai_sale_invoices').select('id').order('created_at', { ascending: false }).limit(1).single()
+        if (invData) {
+          const path = 'kitai/' + invData.id + '/' + invoiceFile.name
+          const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, invoiceFile, { upsert: true })
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
+            await supabase.from('kitai_sale_invoices').update({ invoice_file_name: invoiceFile.name, invoice_file_url: urlData.publicUrl }).eq('id', invData.id)
+          }
+        }
+      }
       setSelected(new Set())
       setShowInvoiceForm(false)
-      setInvoiceDetails({ date: '', number: '', amount: '', notes: '' })
+      setInvoiceDetails({ date: '', number: '', notes: '' })
+      setInvoiceFile(null)
       onReload()
     }
     setCreating(false)
@@ -390,7 +402,6 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
               <div className="row" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
                 <div><label>Invoice date</label><input type="date" value={invoiceDetails.date} onChange={e => setInvoiceDetails(f => ({ ...f, date: e.target.value }))} /></div>
                 <div><label>Invoice number</label><input style={{ width: 140 }} value={invoiceDetails.number} onChange={e => setInvoiceDetails(f => ({ ...f, number: e.target.value }))} placeholder="e.g. KIT-001" /></div>
-                <div><label>Amount (N$)</label><input type="number" min="0" step="0.01" style={{ width: 130 }} value={invoiceDetails.amount} onChange={e => setInvoiceDetails(f => ({ ...f, amount: e.target.value }))} /></div>
                 <div><label>Notes</label><input style={{ width: 180 }} value={invoiceDetails.notes} onChange={e => setInvoiceDetails(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
               </div>
               <button className="primary" disabled={creating} onClick={createInvoiceFromSelection}>
@@ -449,6 +460,8 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 // ─── DNA COST RECOVERY TAB ──────────────────────────────────────────────────
 function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, search, onReload }) {
   const filteredTransfers = search ? transfers.filter(t => (t.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : transfers
+  // Auto-expand all sections when searching
+  useEffect(() => { if (search) { setAllOpen(true); setPendingOpen(true); setInvoicedOpen(true) } }, [search])
   const [eligibleOpen, setEligibleOpen] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedForInvoice, setSelectedForInvoice] = useState(new Set())
@@ -536,7 +549,6 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
     const { error } = await supabase.from('kitai_sale_invoices').insert({
       invoice_date: invoiceDetails.date || null,
       invoice_number: invoiceDetails.number || null,
-      amount: invoiceDetails.amount ? parseFloat(invoiceDetails.amount) : null,
       notes: invoiceDetails.notes || null,
       animal_ids: transferIds,
       animal_summaries: (freshTransfers || []).map(t => ({
@@ -546,9 +558,22 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
     })
     if (error) { alert('Failed: ' + error.message) }
     else {
+      // Upload file if selected
+      if (invoiceFile) {
+        const { data: invData } = await supabase.from('kitai_sale_invoices').select('id').order('created_at', { ascending: false }).limit(1).single()
+        if (invData) {
+          const path = 'kitai/' + invData.id + '/' + invoiceFile.name
+          const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, invoiceFile, { upsert: true })
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
+            await supabase.from('kitai_sale_invoices').update({ invoice_file_name: invoiceFile.name, invoice_file_url: urlData.publicUrl }).eq('id', invData.id)
+          }
+        }
+      }
       setSelected(new Set())
       setShowInvoiceForm(false)
-      setInvoiceDetails({ date: '', number: '', amount: '', notes: '' })
+      setInvoiceDetails({ date: '', number: '', notes: '' })
+      setInvoiceFile(null)
       onReload()
     }
     setCreating(false)
@@ -649,9 +674,7 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
                   {showInvoiceForm ? 'Cancel' : `Invoice ${selectedForInvoice.size}`}
                 </button>
               )}
-              <button style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); const pendingIds = filteredTransfers.filter(t => t.invoice_status === 'pending').map(t => t.id); const allSel = pendingIds.every(id => selectedForInvoice.has(id)); setSelectedForInvoice(allSel ? new Set() : new Set(pendingIds)) }}>
-                {filteredTransfers.filter(t => t.invoice_status === 'pending').every(t => selectedForInvoice.has(t.id)) ? 'Deselect all' : 'Select all'}
-              </button>
+
               <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: pendingOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
             </div>
           </div>
@@ -664,7 +687,15 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
                 <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
                   <div><label>Invoice number</label><input style={{ width: 140 }} value={invoiceDetails.number} onChange={e => setInvoiceDetails(f => ({ ...f, number: e.target.value }))} placeholder="e.g. INV-001" /></div>
                   <div><label>Invoice date</label><input type="date" value={invoiceDetails.date} onChange={e => setInvoiceDetails(f => ({ ...f, date: e.target.value }))} /></div>
-                  <div><label>Notes</label><input style={{ width: 200 }} value={invoiceDetails.notes} onChange={e => setInvoiceDetails(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
+                  <div><label>Notes</label><input style={{ width: 160 }} value={invoiceDetails.notes} onChange={e => setInvoiceDetails(f => ({ ...f, notes: e.target.value }))} placeholder="optional" /></div>
+                  <div>
+                    <label>Invoice document</label>
+                    <input ref={invoiceFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={e => setInvoiceFile(e.target.files[0] || null)} />
+                    <div className="row" style={{ gap: 6 }}>
+                      <button style={{ fontSize: 12 }} onClick={() => invoiceFileRef.current.click()}>{invoiceFile ? invoiceFile.name : 'Upload file'}</button>
+                      {invoiceFile && <button className="danger-text" style={{ fontSize: 12 }} onClick={() => setInvoiceFile(null)}>Remove</button>}
+                    </div>
+                  </div>
                 </div>
                 <button className="primary" disabled={submitting || !invoiceDetails.number || !invoiceDetails.date} onClick={async () => {
                   setSubmitting(true)
@@ -833,7 +864,6 @@ function SalesTab({ saleInvoices, transfers, search, onReload }) {
     const { error } = await supabase.from('kitai_sale_invoices').insert({
       invoice_date: invoiceDetails.date || null,
       invoice_number: invoiceDetails.number || null,
-      amount: invoiceDetails.amount ? parseFloat(invoiceDetails.amount) : null,
       notes: invoiceDetails.notes || null,
       animal_ids: transferIds,
       animal_summaries: (freshTransfers || []).map(t => ({
@@ -843,9 +873,22 @@ function SalesTab({ saleInvoices, transfers, search, onReload }) {
     })
     if (error) { alert('Failed: ' + error.message) }
     else {
+      // Upload file if selected
+      if (invoiceFile) {
+        const { data: invData } = await supabase.from('kitai_sale_invoices').select('id').order('created_at', { ascending: false }).limit(1).single()
+        if (invData) {
+          const path = 'kitai/' + invData.id + '/' + invoiceFile.name
+          const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, invoiceFile, { upsert: true })
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
+            await supabase.from('kitai_sale_invoices').update({ invoice_file_name: invoiceFile.name, invoice_file_url: urlData.publicUrl }).eq('id', invData.id)
+          }
+        }
+      }
       setSelected(new Set())
       setShowInvoiceForm(false)
-      setInvoiceDetails({ date: '', number: '', amount: '', notes: '' })
+      setInvoiceDetails({ date: '', number: '', notes: '' })
+      setInvoiceFile(null)
       onReload()
     }
     setCreating(false)
