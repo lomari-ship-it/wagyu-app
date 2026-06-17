@@ -292,13 +292,13 @@ export default function CattleRegister() {
                       return (
                         <tr key={c.id}>
                           <td>{c.owner}</td>
-                          <td>{c.identity_number || <span className="faint">—</span>}</td>
+                          <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
                           <td>{c.ear_tag}</td>
-                          <td>{c.sex || <span className="faint">—</span>}</td>
-                          <td>{c.date_of_birth || <span className="faint">—</span>}</td>
-                          <td>{c.breed || <span className="faint">—</span>}</td>
-                          <td>{c.mother_id || <span className="faint">—</span>}</td>
-                          <td>{c.father_id || <span className="faint">—</span>}</td>
+                          <td>{(!c.sex || c.sex === 'NULL') ? <span className="faint">—</span> : c.sex}</td>
+                          <td>{(!c.date_of_birth || c.date_of_birth === 'NULL') ? <span className="faint">—</span> : c.date_of_birth}</td>
+                          <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
+                          <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
+                          <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
@@ -343,13 +343,13 @@ export default function CattleRegister() {
                       return (
                         <tr key={c.id}>
                           <td>{c.owner}</td>
-                          <td>{c.identity_number || <span className="faint">—</span>}</td>
+                          <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
                           <td>{c.ear_tag}</td>
-                          <td>{c.sex || <span className="faint">—</span>}</td>
-                          <td>{c.date_of_birth || <span className="faint">—</span>}</td>
-                          <td>{c.breed || <span className="faint">—</span>}</td>
-                          <td>{c.mother_id || <span className="faint">—</span>}</td>
-                          <td>{c.father_id || <span className="faint">—</span>}</td>
+                          <td>{(!c.sex || c.sex === 'NULL') ? <span className="faint">—</span> : c.sex}</td>
+                          <td>{(!c.date_of_birth || c.date_of_birth === 'NULL') ? <span className="faint">—</span> : c.date_of_birth}</td>
+                          <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
+                          <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
+                          <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
@@ -381,7 +381,7 @@ export default function CattleRegister() {
                   {archived.map((c) => (
                     <tr key={c.id} style={{ opacity: 0.8 }}>
                       <td>{c.owner}</td>
-                      <td>{c.identity_number || <span className="faint">—</span>}</td>
+                      <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
                       <td>{c.ear_tag}</td>
                       <td><span className="badge neutral">{c.transfer_type === 'kitai' ? 'Kitai pending sale' : (c.transfer_type || '—')}</span></td>
                       <td>{c.transfer_date || <span className="faint">—</span>}</td>
