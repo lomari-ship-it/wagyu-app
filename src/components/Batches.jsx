@@ -62,9 +62,9 @@ export default function Batches() {
     if (selectedCalfIds.size === 0) return
     setCreating(true); setStatusMsg('Creating batch...')
     const selected2 = calves.filter((c) => selectedCalfIds.has(c.id))
-    const owners = [...new Set(selected2.map(c => c.owner))].join(', ')
+    const ownerList = [...new Set(selected2.map(c => c.owner))]
     const { error } = await supabase.from('batches').insert({
-      owner: owners,
+      owner: ownerList[0],  // primary owner; full breakdown via calf_summaries
       calf_ids: Array.from(selectedCalfIds),
       calf_summaries: selected2.map((c) => ({ id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date })),
     })
@@ -245,7 +245,7 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div>
           <div className="row" style={{ marginBottom: 4 }}>
-            <strong>{batch.owner}</strong>
+            <strong>{[...new Set(summaries.map(s => s.owner || batch.owner).filter(Boolean))].join(', ') || batch.owner}</strong>
             <span className="muted">&mdash; {summaries.length} calves</span>
           </div>
           <div style={{ marginTop: 4 }}>
