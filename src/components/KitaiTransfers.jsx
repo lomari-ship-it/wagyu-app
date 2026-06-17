@@ -50,11 +50,30 @@ export default function KitaiTransfers() {
       supabase.from('batches').select('id, calf_ids, calf_summaries, rate_per_test, invoice_test_count, invoice_amount_payable'),
       supabase.from('kitai_sale_invoices').select('*').order('created_at', { ascending: false }),
     ])
-    if (!t.error) setTransfers(t.data || [])
-    if (!ca.error) setAllKitaiCattle(ca.data || [])
+    const kitaiCattle = ca.data || []
+    const existingTransfers = t.data || []
+    if (!ca.error) setAllKitaiCattle(kitaiCattle)
     if (!c.error) setCalves(c.data || [])
     if (!b.error) setBatches(b.data || [])
     if (!si.error) setSaleInvoices(si.data || [])
+
+    // Auto-add any kitai cattle not yet in transfers
+    const transferredAnimalIds = new Set(existingTransfers.map(tr => tr.animal_id))
+    const toAutoAdd = kitaiCattle.filter(c => !transferredAnimalIds.has(c.id))
+    if (toAutoAdd.length > 0) {
+      await supabase.from('kitai_transfers').insert(
+        toAutoAdd.map(c => ({
+          animal_type: 'cattle', animal_id: c.id, owner: c.owner,
+          ear_tag: c.ear_tag, identity_number: c.identity_number || null,
+          birth_date: c.date_of_birth || null, transfer_date: c.transfer_date || null,
+          dna_cost_recoverable: null, invoice_status: 'pending', sold_flag: false,
+        }))
+      )
+      const { data: fresh } = await supabase.from('kitai_transfers').select('*').order('created_at', { ascending: false })
+      setTransfers(fresh || [])
+    } else {
+      if (!t.error) setTransfers(existingTransfers)
+    }
     setLoading(false)
   }
 
@@ -63,6 +82,19 @@ export default function KitaiTransfers() {
       const calfIds = batch.calf_ids || []
       const summaries = batch.calf_summaries || []
       const inBatch = calfIds.includes(calfId) || summaries.some(s => s.id === calfId || s.earTag === earTag)
+      if (inBatch) {
+        if (batch.rate_per_test) return parseFloat(batch.rate_per_test)
+        if (batch.invoice_amount_payable && batch.invoice_test_count)
+          return parseFloat(batch.invoice_amount_payable) / batch.invoice_test_count
+      }
+    }
+    return null
+  }
+
+  function getDnaCostByEarTag(earTag) {
+    for (const batch of batches) {
+      const summaries = batch.calf_summaries || []
+      const inBatch = summaries.some(s => s.earTag === earTag)
       if (inBatch) {
         if (batch.rate_per_test) return parseFloat(batch.rate_per_test)
         if (batch.invoice_amount_payable && batch.invoice_test_count)
@@ -434,14 +466,20 @@ function DnaTab({ transfers, batches, calves, getDnaCost, allKitaiCattle, invoic
     onReload()
   }
 
-  const totalDna = transfers.reduce((s, t) => s + (parseFloat(t.dna_cost_recoverable) || 0), 0)
-  const pendingDna = transfers.filter(t => t.invoice_status === 'pending').reduce((s, t) => s + (parseFloat(t.dna_cost_recoverable) || 0), 0)
+  // Calculate DNA cost per transfer by matching ear tag to batch
+  const transfersWithDna = transfers.map(t => {
+    const dnaCost = parseFloat(t.dna_cost_recoverable) || getDnaCostByEarTag(t.ear_tag) || 0
+    return { ...t, dnaCost }
+  })
+
+  const totalDna = transfersWithDna.reduce((s, t) => s + t.dnaCost, 0)
+  const pendingDna = transfersWithDna.filter(t => t.invoice_status === 'pending').reduce((s, t) => s + t.dnaCost, 0)
   const byOwner = {}
-  transfers.forEach(t => {
+  transfersWithDna.forEach(t => {
     if (!byOwner[t.owner]) byOwner[t.owner] = { count: 0, total: 0, pending: 0 }
     byOwner[t.owner].count++
-    byOwner[t.owner].total += parseFloat(t.dna_cost_recoverable) || 0
-    if (t.invoice_status === 'pending') byOwner[t.owner].pending += parseFloat(t.dna_cost_recoverable) || 0
+    byOwner[t.owner].total += t.dnaCost
+    if (t.invoice_status === 'pending') byOwner[t.owner].pending += t.dnaCost
   })
 
   const filtered = statusFilter === 'all' ? transfers : transfers.filter(t => t.invoice_status === statusFilter)
@@ -564,7 +602,7 @@ function DnaTab({ transfers, batches, calves, getDnaCost, allKitaiCattle, invoic
                     <td><strong>{t.ear_tag}</strong></td>
                     <td>{t.identity_number || <span className="faint">—</span>}</td>
                     <td>{formatDate(t.transfer_date)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtCurrency(t.dna_cost_recoverable)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtCurrency(transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || t.dna_cost_recoverable)}</td>
                     <td><span className={`badge ${t.invoice_status === 'invoiced' ? 'success' : 'warning'}`}>{t.invoice_status === 'invoiced' ? 'Invoiced' : 'Pending'}</span></td>
                     <td>{t.invoice_status === 'invoiced' ? <span style={{ fontSize: 13 }}>{t.invoice_number || <span className="faint">—</span>}</span> : <input style={{ width: 120, fontSize: 12 }} defaultValue={t.invoice_number || ''} placeholder="Invoice no." onBlur={e => updateTransfer(t.id, { invoice_number: e.target.value || null })} />}</td>
                     <td style={{ textAlign: 'right' }}>
@@ -576,7 +614,7 @@ function DnaTab({ transfers, batches, calves, getDnaCost, allKitaiCattle, invoic
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(filtered.reduce((s, t) => s + (parseFloat(t.dna_cost_recoverable) || 0), 0))}</td><td colSpan={3}></td></tr></tfoot>
+              <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(filtered.reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || parseFloat(t.dna_cost_recoverable) || 0), 0))}</td><td colSpan={3}></td></tr></tfoot>
             </table>
           </div>
         )}
