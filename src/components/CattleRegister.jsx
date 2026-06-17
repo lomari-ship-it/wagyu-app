@@ -48,10 +48,9 @@ export default function CattleRegister() {
   }
 
 
-  async function syncExistingData() {
-    // Fetch all calves and cattle register entries
+  async function syncExistingData(overwrite = false) {
     const [{ data: calvesData }, { data: cattleData }] = await Promise.all([
-      supabase.from('calves').select('ear_tag, identity_number, birth_date, color, sex, calf_details, birth_mass, mother_id, father_id, breed'),
+      supabase.from('calves').select('ear_tag, identity_number, birth_date, sex, mother_id, father_id, breed'),
       supabase.from('cattle_register').select('id, ear_tag, sex, date_of_birth, breed, mother_id, father_id, identity_number'),
     ])
     if (!calvesData || !cattleData) { alert('Failed to load data for sync.'); return }
@@ -65,12 +64,12 @@ export default function CattleRegister() {
       const calf = calfMap[cattle.ear_tag]
       if (!calf) continue
       const updates = {}
-      if (isEmpty(cattle.sex) && calf.sex) updates.sex = calf.sex
-      if (isEmpty(cattle.date_of_birth) && calf.birth_date) updates.date_of_birth = calf.birth_date
-      if (isEmpty(cattle.breed) && calf.breed) updates.breed = calf.breed
-      if (isEmpty(cattle.mother_id) && calf.mother_id) updates.mother_id = calf.mother_id
-      if (isEmpty(cattle.father_id) && calf.father_id) updates.father_id = calf.father_id
-      if (isEmpty(cattle.identity_number) && calf.identity_number) updates.identity_number = calf.identity_number
+      if ((overwrite || isEmpty(cattle.sex)) && calf.sex) updates.sex = calf.sex
+      if ((overwrite || isEmpty(cattle.date_of_birth)) && calf.birth_date) updates.date_of_birth = calf.birth_date
+      if ((overwrite || isEmpty(cattle.breed)) && calf.breed) updates.breed = calf.breed
+      if ((overwrite || isEmpty(cattle.mother_id)) && calf.mother_id) updates.mother_id = calf.mother_id
+      if ((overwrite || isEmpty(cattle.father_id)) && calf.father_id) updates.father_id = calf.father_id
+      if ((overwrite || isEmpty(cattle.identity_number)) && calf.identity_number) updates.identity_number = calf.identity_number
       if (Object.keys(updates).length > 0) {
         await supabase.from('cattle_register').update(updates).eq('id', cattle.id)
         updated++
@@ -262,7 +261,10 @@ export default function CattleRegister() {
           placeholder="Search by ear tag or identity number..."
           style={{ width: '100%', maxWidth: 360 }}
         />
-        <button style={{ fontSize: 12 }} onClick={syncExistingData}>Sync data from calf registrations</button>
+        <div className="row" style={{ gap: 4 }}>
+          <button style={{ fontSize: 12 }} onClick={() => syncExistingData(false)}>Sync from calves (fill missing)</button>
+          <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('This will overwrite existing cattle register data with calf registration data. Continue?')) syncExistingData(true) }}>Sync from calves (overwrite all)</button>
+        </div>
       </div>
 
       {/* Breeding animals */}
