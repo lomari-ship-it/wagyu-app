@@ -59,17 +59,18 @@ export default function CattleRegister() {
     const calfMap = {}
     calvesData.forEach(c => { calfMap[c.ear_tag] = c })
 
+    const isEmpty = (v) => !v || v === 'NULL'
     let updated = 0
     for (const cattle of cattleData) {
       const calf = calfMap[cattle.ear_tag]
       if (!calf) continue
       const updates = {}
-      if (!cattle.sex && calf.sex) updates.sex = calf.sex
-      if (!cattle.date_of_birth && calf.birth_date) updates.date_of_birth = calf.birth_date
-      if (!cattle.breed && calf.breed) updates.breed = calf.breed
-      if (!cattle.mother_id && calf.mother_id) updates.mother_id = calf.mother_id
-      if (!cattle.father_id && calf.father_id) updates.father_id = calf.father_id
-      if (!cattle.identity_number && calf.identity_number) updates.identity_number = calf.identity_number
+      if (isEmpty(cattle.sex) && calf.sex) updates.sex = calf.sex
+      if (isEmpty(cattle.date_of_birth) && calf.birth_date) updates.date_of_birth = calf.birth_date
+      if (isEmpty(cattle.breed) && calf.breed) updates.breed = calf.breed
+      if (isEmpty(cattle.mother_id) && calf.mother_id) updates.mother_id = calf.mother_id
+      if (isEmpty(cattle.father_id) && calf.father_id) updates.father_id = calf.father_id
+      if (isEmpty(cattle.identity_number) && calf.identity_number) updates.identity_number = calf.identity_number
       if (Object.keys(updates).length > 0) {
         await supabase.from('cattle_register').update(updates).eq('id', cattle.id)
         updated++
