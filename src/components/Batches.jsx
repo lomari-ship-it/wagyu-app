@@ -59,9 +59,8 @@ export default function Batches() {
   }
 
   async function createBatch() {
-    if (!owner || selectedCalfIds.size === 0) return
+    if (selectedCalfIds.size === 0) return
     setCreating(true); setStatusMsg('Creating batch...')
-    const selected = calves.filter((c) => selectedCalfIds.has(c.id))
     const selected2 = calves.filter((c) => selectedCalfIds.has(c.id))
     const owners = [...new Set(selected2.map(c => c.owner))].join(', ')
     const { error } = await supabase.from('batches').insert({
