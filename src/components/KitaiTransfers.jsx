@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
 
+function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+
+
 function fmtCurrency(val) {
   const n = parseFloat(val)
   if (isNaN(n) || n === 0) return '—'
@@ -224,7 +227,7 @@ function DnaRecovery({ transfers, eligibleCalves, eligibleCattle, getDnaCost, on
                     <td>{t.owner}</td>
                     <td><strong>{t.ear_tag}</strong></td>
                     <td>{t.identity_number || <span className="faint">—</span>}</td>
-                    <td>{t.transfer_date || <span className="faint">—</span>}</td>
+                    <td>{t.transfer_date ? formatDate(t.transfer_date) : <span className="faint">—</span>}</td>
                     <td style={{ textAlign: 'right' }}>{fmtCurrency(t.dna_cost_recoverable)}</td>
                     <td><span className={`badge ${t.invoice_status === 'invoiced' ? 'success' : 'warning'}`}>{t.invoice_status === 'invoiced' ? 'Invoiced' : 'Pending'}</span></td>
                     <td>

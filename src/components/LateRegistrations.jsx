@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
 
+function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+
+
 const BUCKET = 'batch-documents'
 
 function daysBetween(birthDate, submissionDate) {

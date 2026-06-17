@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
 
+function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+
+
 const BUCKET = 'batch-documents'
 
 function fmtCurrency(val) {
@@ -111,7 +114,7 @@ export default function Batches() {
                   <input type="checkbox" checked={selectedCalfIds.has(c.id)} onChange={() => toggleCalf(c.id)} style={{ width: 'auto' }} />
                   <span><strong>{c.ear_tag}</strong></span>
                   {[c.identity_number, c.ear_tag].filter(Boolean).join(' // ') && <span className="muted">{[c.identity_number, c.ear_tag].filter(Boolean).join(' // ')}</span>}
-                  <span className="muted">{c.birth_date}</span>
+                  <span className="muted">{formatDate(c.birth_date)}</span>
                 </label>
               ))}
             </div>
@@ -254,7 +257,7 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
               </div>
             )}
           </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Created {new Date(batch.created_at).toLocaleDateString()}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Created {new Date(batch.created_at).toLocaleDateString("en-GB")}</div>
         </div>
         <div className="stack" style={{ gap: 4, alignItems: 'flex-end' }}>
           <span className={`badge ${isPending ? 'warning' : 'success'}`}>{isPending ? 'Pending' : 'Submitted'}</span>

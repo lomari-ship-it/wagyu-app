@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
 
+function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+
+
 const emptyForm = {
   owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
   color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
@@ -53,12 +56,24 @@ export default function CalfRegistration() {
     const rows = lines.slice(1)
     const records = []
 
+    function parseDate(val) {
+      if (!val) return null
+      // Accept YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
+      // Accept DD/MM/YYYY or DD-MM-YYYY
+      const m = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+      if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
+      // Accept MM/DD/YYYY
+      const m2 = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
+      if (m2) return `${m2[3].length === 2 ? '20' + m2[3] : m2[3]}-${m2[1].padStart(2,'0')}-${m2[2].padStart(2,'0')}`
+      return null
+    }
+
     for (const row of rows) {
       const values = row.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
       const obj = {}
       headers.forEach((h, i) => { obj[h] = values[i] || '' })
 
-      // Build identity number from field or leave null
       let identityNumber = obj.identity_number || null
 
       records.push({
@@ -66,7 +81,7 @@ export default function CalfRegistration() {
         breed: obj.breed || 'Wagyu',
         ear_tag: obj.ear_tag || '',
         identity_number: identityNumber || null,
-        birth_date: obj.birth_date || null,
+        birth_date: parseDate(obj.birth_date),
         color: obj.color || '',
         sex: obj.sex || null,
         calf_details: obj.calf_details || 'Single',
@@ -435,7 +450,7 @@ function CalfCard({ calf, onEdit, onDelete }) {
             {calf.sold_flag && <span className="badge neutral">Sold/Transferred</span>}
           </div>
           <div className="muted">
-            {calf.owner} &middot; Born {calf.birth_date} &middot; {calf.color}
+            {calf.owner} &middot; Born {formatDate(calf.birth_date)} &middot; {calf.color}
             {calf.sex && ` · ${calf.sex}`}
             {calf.calf_details && calf.calf_details !== 'Single' && ` · ${calf.calf_details}`}
             {calf.birth_mass && ` · ${calf.birth_mass} kg`}

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
 
+function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+
+
 const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '' }
 const emptyGeneral  = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: '', mother_id: '', father_id: '' }
 const emptyTransfer = { type: '', date: '', customer: '', invoice_number: '', breed: 'Wagyu', sex: '', date_of_birth: '' }
