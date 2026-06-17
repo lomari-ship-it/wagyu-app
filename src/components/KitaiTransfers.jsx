@@ -424,11 +424,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
                       <td><strong>{c.ear_tag}</strong></td>
                       <td>{formatDate(c.transfer_date)}</td>
                       <td>{isSold ? <span className="badge success">Sold / invoiced</span> : <span className="badge warning">Pending sale</span>}</td>
-                      <td>{!isSold && (
-                        <button className="primary" style={{ fontSize: 11 }} onClick={() => { setSelected(new Set([c.id])); setShowInvoiceForm(true) }}>
-                          Invoice
-                        </button>
-                      )}</td>
+<td></td>
                     </tr>
                   )
                 })}

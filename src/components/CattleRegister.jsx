@@ -360,7 +360,7 @@ export default function CattleRegister() {
               <table>
                 <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Type</th><th>Date</th><th>Customer</th><th>Invoice no.</th><th></th></tr></thead>
                 <tbody>
-                  {archived.map((c) => (
+                  {archived.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => (
                     <tr key={c.id} style={{ opacity: 0.8 }}>
                       <td>{c.owner}</td>
                       <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
