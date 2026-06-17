@@ -790,6 +790,47 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
   )
 }
 
+function InvoiceFileUpload({ inv, onReload }) {
+  const fileRef = useRef()
+  const [uploading, setUploading] = useState(false)
+
+  async function handleUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    const path = 'kitai/' + inv.id + '/' + file.name
+    const { error } = await supabase.storage.from('batch-documents').upload(path, file, { upsert: true })
+    if (error) { alert('Upload failed: ' + error.message); setUploading(false); return }
+    const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
+    await supabase.from('kitai_sale_invoices').update({ invoice_file_name: file.name, invoice_file_url: urlData.publicUrl }).eq('id', inv.id)
+    setUploading(false); onReload()
+  }
+
+  async function removeFile() {
+    await supabase.from('kitai_sale_invoices').update({ invoice_file_name: null, invoice_file_url: null }).eq('id', inv.id)
+    onReload()
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+      <label style={{ marginBottom: 4 }}>Invoice document</label>
+      {inv.invoice_file_url ? (
+        <div className="row">
+          <a href={inv.invoice_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {inv.invoice_file_name}</a>
+          <button className="danger-text" style={{ fontSize: 12 }} onClick={removeFile}>Remove</button>
+        </div>
+      ) : (
+        <div className="row">
+          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleUpload} />
+          <button disabled={uploading} onClick={() => fileRef.current.click()} style={{ fontSize: 13 }}>
+            {uploading ? 'Uploading...' : 'Upload invoice'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
 function SalesTab({ saleInvoices, transfers, search, onReload }) {
   const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
@@ -983,10 +1024,10 @@ function SalesTab({ saleInvoices, transfers, search, onReload }) {
                       <div className="row" style={{ flexWrap: 'wrap' }}>
                         <div><label>Invoice date</label><input type="date" defaultValue={inv.invoice_date || ''} onBlur={e => updateInvoice(inv.id, { invoice_date: e.target.value || null })} /></div>
                         <div><label>Invoice number</label><input style={{ width: 140 }} defaultValue={inv.invoice_number || ''} onBlur={e => updateInvoice(inv.id, { invoice_number: e.target.value || null })} /></div>
-                        <div><label>Amount (N$)</label><input type="number" min="0" step="0.01" style={{ width: 130 }} defaultValue={inv.amount || ''} onBlur={e => updateInvoice(inv.id, { amount: e.target.value ? parseFloat(e.target.value) : null })} /></div>
                         <div><label>Payment date</label><input type="date" defaultValue={inv.payment_date || ''} onBlur={e => updateInvoice(inv.id, { payment_date: e.target.value || null })} /></div>
                       </div>
                     </div>
+                    <InvoiceFileUpload inv={inv} onReload={onReload} />
                     <div style={{ marginTop: 8 }}>
                       <button className="danger-text" onClick={() => deleteInvoice(inv.id)}>Delete invoice</button>
                     </div>
