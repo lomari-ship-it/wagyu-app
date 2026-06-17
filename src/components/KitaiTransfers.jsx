@@ -119,7 +119,7 @@ export default function KitaiTransfers() {
       </div>
 
       {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} onReload={loadAll} />}
-      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} onReload={loadAll} />}
+      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} onReload={loadAll} />}
       {tab === 'sales' && <SalesTab saleInvoices={saleInvoices} transfers={transfers} onReload={loadAll} />}
     </div>
   )
@@ -435,7 +435,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 }
 
 // ─── DNA COST RECOVERY TAB ──────────────────────────────────────────────────
-function DnaTab({ transfers, batches, calves, getDnaCost, allKitaiCattle, invoicedTransferIds, onReload }) {
+function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, onReload }) {
   const [eligibleOpen, setEligibleOpen] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
 
