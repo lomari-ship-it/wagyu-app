@@ -31,6 +31,7 @@ function CollapsibleCard({ title, count, countLabel, children, defaultOpen = fal
 
 export default function KitaiTransfers() {
   const [tab, setTab] = useState('cattle')
+  const [globalSearch, setGlobalSearch] = useState('')
   const [transfers, setTransfers] = useState([])
   const [allKitaiCattle, setAllKitaiCattle] = useState([])
   const [calves, setCalves] = useState([])
@@ -117,15 +118,26 @@ export default function KitaiTransfers() {
         ))}
       </div>
 
-      {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} onReload={loadAll} />}
-      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} onReload={loadAll} />}
-      {tab === 'sales' && <SalesTab saleInvoices={saleInvoices} transfers={transfers} onReload={loadAll} />}
+      <div style={{ marginBottom: 16 }}>
+        <input
+          type="text"
+          value={globalSearch}
+          onChange={e => setGlobalSearch(e.target.value)}
+          placeholder="Search by ear tag..."
+          style={{ width: '100%', maxWidth: 320 }}
+        />
+      </div>
+
+      {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
+      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
+      {tab === 'sales' && <SalesTab saleInvoices={saleInvoices} transfers={transfers} search={globalSearch} onReload={loadAll} />}
     </div>
   )
 }
 
 // ─── CATTLE TRANSFERS TAB ───────────────────────────────────────────────────
-function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedTransferIds, onReload }) {
+function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedTransferIds, search, onReload }) {
+  const filteredCattle = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
   const [selected, setSelected] = useState(new Set())
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
   const [invoiceDetails, setInvoiceDetails] = useState({ date: '', number: '', amount: '', notes: '' })
@@ -134,6 +146,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [notFound, setNotFound] = useState([])
+  const allCattleToShow = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
   const soldIds = new Set(transfers.filter(t => t.sold_flag).map(t => t.animal_id))
   const invoicedCattleIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []).map(id => {
     const t = transfers.find(t => t.id === id)
@@ -354,8 +367,8 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
       )}
 
       {/* All transferred */}
-      <CollapsibleCard title="All cattle transferred to Kitai" count={allKitaiCattle.length} countLabel="animal" defaultOpen={true}>
-        {allKitaiCattle.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No cattle transferred to Kitai yet.</p> : (
+      <CollapsibleCard title="All cattle transferred to Kitai" count={allCattleToShow.length} countLabel="animal" defaultOpen={true}>
+        {allCattleToShow.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No cattle transferred to Kitai yet.</p> : (
           <>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, marginBottom: 8 }}>
             <button style={{ fontSize: 12 }} onClick={() => {
@@ -390,7 +403,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
             <table>
               <thead><tr><th></th><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Transfer date</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                {allKitaiCattle.map(c => {
+                {allCattleToShow.map(c => {
                   const isSold = soldIds.has(c.id) || invoicedCattleIds.has(c.id)
                   return (
                     <tr key={c.id}>
@@ -434,7 +447,8 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 }
 
 // ─── DNA COST RECOVERY TAB ──────────────────────────────────────────────────
-function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, onReload }) {
+function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, search, onReload }) {
+  const filteredTransfers = search ? transfers.filter(t => (t.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : transfers
   const [eligibleOpen, setEligibleOpen] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedForInvoice, setSelectedForInvoice] = useState(new Set())
@@ -587,6 +601,43 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
       {/* Transfer records */}
       <div className="stack" style={{ gap: 12 }}>
 
+        {/* All transfers — collapsible */}
+        <div className="card" style={{ padding: 0 }}>
+          <div onClick={() => setAllOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>All transfers</h2>
+            <div className="row" style={{ gap: 12 }}>
+              <span className="muted">{transfers.length} total · {transfers.filter(t => t.invoice_status === 'pending').length} pending · {transfers.filter(t => t.invoice_status === 'invoiced').length} invoiced</span>
+              <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: allOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+            </div>
+          </div>
+          {allOpen && (
+            <div style={{ overflowX: 'auto', borderTop: '1px solid var(--color-border)' }}>
+              <table>
+                <thead><tr><th>Type</th><th>Owner</th><th>Ear tag</th><th>Identity no.</th><th>Transfer date</th><th style={{ textAlign: 'right' }}>DNA recoverable</th><th>Status</th><th>Invoice no.</th></tr></thead>
+                <tbody>
+                  {filteredTransfers.map(t => {
+                    const dnaCost = transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0
+                    return (
+                      <tr key={t.id}>
+                        <td><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span></td>
+                        <td>{t.owner}</td>
+                        <td><strong>{t.ear_tag}</strong></td>
+                        <td>{t.identity_number || <span className="faint">—</span>}</td>
+                        <td>{formatDate(t.transfer_date)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtCurrency(dnaCost)}</td>
+                        <td><span className={`badge ${t.invoice_status === 'invoiced' ? 'success' : 'warning'}`}>{t.invoice_status === 'invoiced' ? 'Invoiced' : 'Pending'}</span></td>
+                        <td>{t.invoice_number || <span className="faint">—</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(transfers.reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0), 0))}</td><td colSpan={2}></td></tr></tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+
+
         {/* Pending — collapsible with checkboxes */}
         <div className="card" style={{ padding: 0 }}>
           <div onClick={(e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') setPendingOpen(v => !v) }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
@@ -665,42 +716,6 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
           )}
         </div>
 
-        {/* All transfers — collapsible */}
-        <div className="card" style={{ padding: 0 }}>
-          <div onClick={() => setAllOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>All transfers</h2>
-            <div className="row" style={{ gap: 12 }}>
-              <span className="muted">{transfers.length} total · {transfers.filter(t => t.invoice_status === 'pending').length} pending · {transfers.filter(t => t.invoice_status === 'invoiced').length} invoiced</span>
-              <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: allOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
-            </div>
-          </div>
-          {allOpen && (
-            <div style={{ overflowX: 'auto', borderTop: '1px solid var(--color-border)' }}>
-              <table>
-                <thead><tr><th>Type</th><th>Owner</th><th>Ear tag</th><th>Identity no.</th><th>Transfer date</th><th style={{ textAlign: 'right' }}>DNA recoverable</th><th>Status</th><th>Invoice no.</th></tr></thead>
-                <tbody>
-                  {transfers.map(t => {
-                    const dnaCost = transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0
-                    return (
-                      <tr key={t.id}>
-                        <td><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span></td>
-                        <td>{t.owner}</td>
-                        <td><strong>{t.ear_tag}</strong></td>
-                        <td>{t.identity_number || <span className="faint">—</span>}</td>
-                        <td>{formatDate(t.transfer_date)}</td>
-                        <td style={{ textAlign: 'right' }}>{fmtCurrency(dnaCost)}</td>
-                        <td><span className={`badge ${t.invoice_status === 'invoiced' ? 'success' : 'warning'}`}>{t.invoice_status === 'invoiced' ? 'Invoiced' : 'Pending'}</span></td>
-                        <td>{t.invoice_number || <span className="faint">—</span>}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={5}>Total</td><td style={{ textAlign: 'right' }}>{fmtCurrency(transfers.reduce((s, t) => s + (transfersWithDna.find(tw => tw.id === t.id)?.dnaCost || 0), 0))}</td><td colSpan={2}></td></tr></tfoot>
-              </table>
-            </div>
-          )}
-        </div>
-
         {/* Invoiced — collapsible */}
         <div className="card" style={{ padding: 0 }}>
           <div onClick={() => setInvoicedOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
@@ -747,7 +762,8 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
 }
 
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
-function SalesTab({ saleInvoices, transfers, onReload }) {
+function SalesTab({ saleInvoices, transfers, search, onReload }) {
+  const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [newInvoice, setNewInvoice] = useState({ date: '', number: '', amount: '', notes: '' })
   const [creating, setCreating] = useState(false)
@@ -890,9 +906,9 @@ function SalesTab({ saleInvoices, transfers, onReload }) {
       </div>
 
       {/* Invoice list */}
-      {saleInvoices.length === 0 ? <p className="muted">No sale invoices yet.</p> : (
+      {filteredInvoices.length === 0 ? <p className="muted">No sale invoices{search ? ' matching "' + search + '"' : ''} yet.</p> : (
         <div className="stack">
-          {saleInvoices.map(inv => {
+          {filteredInvoices.map(inv => {
             const summaries = inv.animal_summaries || []
             const isPaid = !!inv.payment_date
             const isExpanded = expandedInvoice === inv.id
