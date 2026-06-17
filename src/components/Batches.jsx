@@ -23,6 +23,7 @@ export default function Batches() {
   const [selectedCalfIds, setSelectedCalfIds] = useState(new Set())
   const [creating, setCreating] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
+  const [calfSearch, setCalfSearch] = useState('')
 
   useEffect(() => { loadAll() }, [])
 
