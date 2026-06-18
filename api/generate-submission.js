@@ -1,6 +1,6 @@
-import ExcelJS from 'exceljs'
+const ExcelJS = require('exceljs')
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -63,31 +63,21 @@ export default async function handler(req, res) {
 
       ws.mergeCells('A4:B4'); ws.mergeCells('C4:F4'); ws.mergeCells('G4:I4'); ws.mergeCells('J4:M4')
       slv('A4','Owner / Eienaar:','C4',FARM_OWNER); slv('G4','Farm / Plaas Nommer:','J4',FARM_NUMBER); ws.getRow(4).height=18
-
       ws.mergeCells('A5:B5'); ws.mergeCells('C5:F5'); ws.mergeCells('G5:I5'); ws.mergeCells('J5:M5')
       slv('A5','Farm Name / Plaasnaam:','C5',FARM_NAME); slv('G5','Region / Streek:','J5',ADDRESS_REGION); ws.getRow(5).height=18
-
       ws.mergeCells('A6:B6'); ws.mergeCells('C6:F6'); ws.mergeCells('G6:I6'); ws.mergeCells('J6:M6')
       slv('A6','Tel:','C6',TEL); slv('G6','Country / Land:','J6',COUNTRY); ws.getRow(6).height=18
-
       ws.mergeCells('A7:B7'); ws.mergeCells('C7:F7'); ws.mergeCells('G7:I7'); ws.mergeCells('J7:M7')
       slv('A7','Email:','C7',EMAIL); slv('G7','Member No:','J7',MEMBER_NO); ws.getRow(7).height=18
-
       ws.mergeCells('A8:D8'); ws.mergeCells('E8:I8'); ws.mergeCells('J8:M8')
-      slv('A8','Batch Ref:', 'E8', batchInfo.id ? String(batchInfo.id).substring(0,8) : '')
+      slv('A8','Batch Ref:','E8', batchInfo.id ? String(batchInfo.id).substring(0,8) : '')
       slv('J8','Date:','J8', batchDate); ws.getRow(8).height=18
 
       const HR = 10
       ws.getRow(9).height = 4
       ws.getRow(HR).height = 30
-      const hdrs = [['A','Breed
-Ras'],['B','Calf Ear No.
-Kalf Oor No.'],['C','Lab#'],['D','DOB
-GD'],['E','Sex
-Gesl.'],['F',''],
-        ['G','Dam Ear No.
-Moer Oor No.'],['H','Lab#'],['I','Reg#'],['J',''],['K','Sire Ear No.
-Bul Oor No.'],['L','Lab#'],['M','Reg#']]
+      const hdrs = [['A','Breed\nRas'],['B','Calf Ear No.\nKalf Oor No.'],['C','Lab#'],['D','DOB\nGD'],['E','Sex\nGesl.'],['F',''],
+        ['G','Dam Ear No.\nMoer Oor No.'],['H','Lab#'],['I','Reg#'],['J',''],['K','Sire Ear No.\nBul Oor No.'],['L','Lab#'],['M','Reg#']]
       for (const [col, text] of hdrs) {
         const cell = ws.getCell(col+HR)
         cell.value=text; cell.font=bFont; cell.fill=hFill; cell.border=border
@@ -138,4 +128,4 @@ function fmtDOB(d) {
   if (!d) return ''
   const p = d.split('-')
   return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d
-                    }
+}
