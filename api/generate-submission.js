@@ -1,13 +1,22 @@
-const ExcelJS = require('exceljs')
-const templateB64 = require('../netlify/functions/submission_template_b64')
+import ExcelJS from 'exceljs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { readFileSync } from 'fs'
 
-const HEADER_ROWS = 17
-const COL_HEADER_ROW = 18
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+function getTemplateB64() {
+  const src = readFileSync(join(__dirname, '../netlify/functions/submission_template_b64.js'), 'utf8')
+  const match = src.match(/export default '([^']+)'/)
+  if (!match) throw new Error('Could not parse template b64 file')
+  return match[1]
+}
+
 const DATA_START_ROW = 19
 const DATA_ROWS_PER_PAGE = 16
 const FOOTER_START_ROW = 36
 const PAGE_HEIGHT = 39
-
 const FARM_OWNER = 'J.A Delport'
 const FARM_NAME = 'Farm JanMie'
 const FARM_NUMBER = 'Farm JanMie No. 1007'
@@ -17,7 +26,7 @@ const EMAIL = 'andre@rampoint.info'
 const ADDRESS_REGION = 'Omaheke'
 const COUNTRY = 'Namibia'
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -32,6 +41,7 @@ module.exports = async function handler(req, res) {
     ? new Date(batchInfo.created_at).toLocaleDateString('en-ZA')
     : new Date().toLocaleDateString('en-ZA')
   try {
+    const templateB64 = getTemplateB64()
     const templateBuffer = Buffer.from(templateB64, 'base64')
     const templateWb = new ExcelJS.Workbook()
     await templateWb.xlsx.load(templateBuffer)
@@ -56,10 +66,9 @@ module.exports = async function handler(req, res) {
       ws.pageSetup.margins = { left: 0.315, right: 0.315, top: 0.354, bottom: 0.354, header: 0.12, footer: 0.12 }
     }
     const buffer = await wb.xlsx.writeBuffer()
-    const base64 = Buffer.from(buffer).toString('base64')
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', 'attachment; filename="batch_submission_' + (batchInfo.id || 'draft') + '.xlsx"')
-    res.status(200).send(Buffer.from(base64, 'base64'))
+    res.status(200).send(Buffer.from(buffer))
   } catch (err) {
     console.error('Submission form generation error:', err)
     res.status(500).send('Generation failed: ' + err.message)
