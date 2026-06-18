@@ -3,7 +3,6 @@ import { supabase, OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
-
 const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '' }
 const emptyTransfer = { type: '', date: '', customer: '', invoice_number: '', breed: 'Wagyu', sex: '', date_of_birth: '' }
 
@@ -29,8 +28,8 @@ export default function CattleRegister() {
   const [transferForm, setTransferForm] = useState(emptyTransfer)
   const [transferSaving, setTransferSaving] = useState(false)
   const [search, setSearch] = useState('')
-  const [breedingOpen, setBreedingOpen] = useState(true)
-  const [generalOpen,  setGeneralOpen]  = useState(true)
+  const [breedingOpen, setBreedingOpen] = useState(false)
+  const [generalOpen,  setGeneralOpen]  = useState(false)
   const [archivedOpen, setArchivedOpen] = useState(false)
 
   useEffect(() => { load() }, [])
@@ -46,17 +45,14 @@ export default function CattleRegister() {
     setLoading(false)
   }
 
-
   async function syncExistingData(overwrite = false) {
     const [{ data: calvesData }, { data: cattleData }] = await Promise.all([
       supabase.from('calves').select('ear_tag, identity_number, birth_date, sex, mother_id, father_id, breed'),
       supabase.from('cattle_register').select('id, ear_tag, sex, date_of_birth, breed, mother_id, father_id, identity_number'),
     ])
     if (!calvesData || !cattleData) { alert('Failed to load data for sync.'); return }
-
     const calfMap = {}
     calvesData.forEach(c => { calfMap[c.ear_tag] = c })
-
     const isEmpty = (v) => !v || v === 'NULL'
     let updated = 0
     for (const cattle of cattleData) {
@@ -91,7 +87,6 @@ export default function CattleRegister() {
     setBSaving(false)
   }
 
-
   function startEdit(record) {
     setTransferringId(null)
     setEditingId(record.id)
@@ -125,18 +120,14 @@ export default function CattleRegister() {
     setTransferSaving(true)
     if (transferForm.type === 'kitai') {
       const { error } = await supabase.from('cattle_register').update({
-        archived: true,
-        transfer_type: 'kitai',
-        transfer_date: transferForm.date || null,
-        transfer_customer: 'Kitai',
+        archived: true, transfer_type: 'kitai',
+        transfer_date: transferForm.date || null, transfer_customer: 'Kitai',
       }).eq('id', record.id)
       if (!error) { setTransferringId(null); load() }
     } else if (transferForm.type === 'breeding') {
       const { error } = await supabase.from('cattle_register').update({
-        animal_type: 'breeding',
-        breed: transferForm.breed || null,
-        sex: transferForm.sex || null,
-        date_of_birth: transferForm.date_of_birth || null,
+        animal_type: 'breeding', breed: transferForm.breed || null,
+        sex: transferForm.sex || null, date_of_birth: transferForm.date_of_birth || null,
       }).eq('id', record.id)
       if (!error) { setTransferringId(null); load() }
     }
@@ -152,17 +143,40 @@ export default function CattleRegister() {
   }
 
   async function deleteRecord(id) {
-    if (!window.confirm('Are you sure you want to delete this record? This cannot be undone.')) return
+    if (!window.confirm('Delete this record? Cannot be undone.')) return
     await supabase.from('cattle_register').delete().eq('id', id)
     load()
   }
 
-  function SectionHeader({ title, count, open, onToggle, sub }) {
+  async function markSold(id) {
+    await supabase.from('cattle_register').update({ transfer_type: 'sold' }).eq('id', id)
+    load()
+  }
+
+  async function markUnsold(id) {
+    await supabase.from('cattle_register').update({ transfer_type: 'kitai' }).eq('id', id)
+    load()
+  }
+
+  // Summary stats
+  const totalActive = breeding.length + general.length
+  const totalTransferred = archived.length
+  const breedCounts = {}
+  const sexCounts = { Male: 0, Female: 0, Unknown: 0 }
+  breeding.forEach(r => {
+    const b = r.breed || 'Unknown'
+    breedCounts[b] = (breedCounts[b] || 0) + 1
+    if (r.sex === 'Male') sexCounts.Male++
+    else if (r.sex === 'Female') sexCounts.Female++
+    else sexCounts.Unknown++
+  })
+  const ownerCounts = {}
+  ;[...breeding, ...general].forEach(r => { ownerCounts[r.owner] = (ownerCounts[r.owner] || 0) + 1 })
+
+  function SectionHeader({ title, count, open, onToggle }) {
     return (
       <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', marginBottom: open ? 12 : 0 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>{title}</h2>
-        </div>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>{title}</h2>
         <div className="row" style={{ gap: 12 }}>
           <span className="muted">{count} record{count !== 1 ? 's' : ''}</span>
           <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
@@ -210,15 +224,12 @@ export default function CattleRegister() {
                 <input type="radio" name={`ttype-${record.id}`} value="kitai" checked={tf.type === 'kitai'} onChange={() => set('type', 'kitai')} style={{ width: 'auto' }} />
                 Transferred to Kitai pending sale
               </label>
-
             </div>
-
             {tf.type === 'kitai' && (
               <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
                 <div><label>Transfer date</label><input type="date" value={tf.date} onChange={(e) => set('date', e.target.value)} /></div>
               </div>
             )}
-
             {tf.type === 'breeding' && (
               <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
                 <div><label>Sex</label><select value={tf.sex} onChange={(e) => set('sex', e.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
@@ -226,7 +237,6 @@ export default function CattleRegister() {
                 <div><label>Breed</label><select value={tf.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></div>
               </div>
             )}
-
             <div className="row">
               <button className="primary" disabled={!tf.type || transferSaving} onClick={() => saveTransfer(record)}>Confirm transfer</button>
               <button onClick={() => setTransferringId(null)}>Cancel</button>
@@ -238,25 +248,89 @@ export default function CattleRegister() {
   }
 
   return (
-    <div className="stack" style={{ gap: 32 }}>
+    <div className="stack" style={{ gap: 24 }}>
 
+      {/* ── Summary (non-collapsible) ── */}
+      <div className="card">
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>Summary</h2>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 24 }}>
+
+          <div style={{ minWidth: 160 }}>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Totals</div>
+            <div className="stack" style={{ gap: 6 }}>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
+                <span>Breeding animals</span><strong>{breeding.length}</strong>
+              </div>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
+                <span>General cattle</span><strong>{general.length}</strong>
+              </div>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 24, borderTop: '1px solid var(--color-border)', paddingTop: 6 }}>
+                <span style={{ fontWeight: 500 }}>Total active</span><strong>{totalActive}</strong>
+              </div>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 24, color: 'var(--color-text-muted)' }}>
+                <span>Transferred / sold</span><strong>{totalTransferred}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ minWidth: 160 }}>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Breeding — Sex</div>
+            <div className="stack" style={{ gap: 6 }}>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
+                <span>Bulls (Male)</span><strong>{sexCounts.Male}</strong>
+              </div>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
+                <span>Cows / Heifers (Female)</span><strong>{sexCounts.Female}</strong>
+              </div>
+              {sexCounts.Unknown > 0 && (
+                <div className="row" style={{ justifyContent: 'space-between', gap: 24, color: 'var(--color-text-muted)' }}>
+                  <span>Unknown</span><strong>{sexCounts.Unknown}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {Object.keys(breedCounts).length > 0 && (
+            <div style={{ minWidth: 160 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Breeding — Breed</div>
+              <div className="stack" style={{ gap: 6 }}>
+                {Object.entries(breedCounts).sort((a,b) => b[1]-a[1]).map(([breed, count]) => (
+                  <div key={breed} className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
+                    <span>{breed}</span><strong>{count}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {Object.keys(ownerCounts).length > 0 && (
+            <div style={{ minWidth: 160 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active — By Owner</div>
+              <div className="stack" style={{ gap: 6 }}>
+                {Object.entries(ownerCounts).sort((a,b) => b[1]-a[1]).map(([owner, count]) => (
+                  <div key={owner} className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
+                    <span>{owner}</span><strong>{count}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* ── Search + Sync ── */}
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by ear tag or identity number..."
-          style={{ width: '100%', maxWidth: 360 }}
-        />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ear tag or identity number..." style={{ width: '100%', maxWidth: 360 }} />
         <div className="row" style={{ gap: 4 }}>
           <button style={{ fontSize: 12 }} onClick={() => syncExistingData(false)}>Sync from calves (fill missing)</button>
           <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('This will overwrite existing cattle register data with calf registration data. Continue?')) syncExistingData(true) }}>Sync from calves (overwrite all)</button>
         </div>
       </div>
 
-      {/* Breeding animals */}
+      {/* ── Breeding animals ── */}
       <div className="card">
-        <SectionHeader title="Breeding animals" count={breeding.length} open={breedingOpen} onToggle={() => setBreedingOpen((v) => !v)} sub="Bulls, cows and heifers used for breeding." />
+        <SectionHeader title="Breeding animals" count={breeding.length} open={breedingOpen} onToggle={() => setBreedingOpen((v) => !v)} />
         {breedingOpen && (
           <>
             <form onSubmit={saveBreeding} className="grid-form" style={{ marginBottom: 12 }}>
@@ -274,7 +348,7 @@ export default function CattleRegister() {
             {loading ? <p className="muted">Loading...</p> : breeding.length === 0 ? <p className="muted">No breeding animals registered yet.</p> : (
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th></th></tr></thead>
+                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother</th><th>Father</th><th></th></tr></thead>
                   <tbody>
                     {breeding.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={true} />
@@ -308,12 +382,11 @@ export default function CattleRegister() {
         )}
       </div>
 
-      {/* General cattle */}
+      {/* ── General cattle ── */}
       <div className="card">
-        <SectionHeader title="General cattle register" count={general.length} open={generalOpen} onToggle={() => setGeneralOpen((v) => !v)} sub="Owner-to-ear-tag mapping for all other registered cattle." />
+        <SectionHeader title="General cattle register" count={general.length} open={generalOpen} onToggle={() => setGeneralOpen((v) => !v)} />
         {generalOpen && (
           <>
-    
             {loading ? null : general.length === 0 ? <p className="muted">No general cattle records yet.</p> : (
               <div style={{ overflowX: 'auto' }}>
                 <table>
@@ -351,34 +424,54 @@ export default function CattleRegister() {
         )}
       </div>
 
-      {/* Archived / transferred */}
+      {/* ── Transferred / sold ── */}
       <div className="card">
-        <SectionHeader title="Transferred / sold" count={archived.length} open={archivedOpen} onToggle={() => setArchivedOpen((v) => !v)} sub="Animals removed from the active register." />
+        <SectionHeader title="Transferred / sold" count={archived.length} open={archivedOpen} onToggle={() => setArchivedOpen((v) => !v)} />
         {archivedOpen && (
           archived.length === 0 ? <p className="muted">No transferred animals yet.</p> : (
             <div style={{ overflowX: 'auto' }}>
               <table>
-                <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Type</th><th>Date</th><th>Customer</th><th>Invoice no.</th><th></th></tr></thead>
+                <thead>
+                  <tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Status</th><th>Type</th><th>Date</th><th>Customer</th><th>Invoice no.</th><th></th></tr>
+                </thead>
                 <tbody>
-                  {archived.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => (
-                    <tr key={c.id} style={{ opacity: 0.8 }}>
-                      <td>{c.owner}</td>
-                      <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
-                      <td>{c.ear_tag}</td>
-                      <td><span className="badge neutral">{c.transfer_type === 'kitai' ? 'Kitai pending sale' : (c.transfer_type || '—')}</span></td>
-                      <td>{c.transfer_date || <span className="faint">—</span>}</td>
-                      <td>{c.transfer_customer || <span className="faint">—</span>}</td>
-                      <td>{c.transfer_invoice_number || <span className="faint">—</span>}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div className="row" style={{ justifyContent: 'flex-end' }}>
-                          <button onClick={() => unarchive(c.id)}>Restore</button>
-                          <button className="danger-text" onClick={() => deleteRecord(c.id)}>Remove</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {archived.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
+                    const isSold = c.transfer_type === 'sold'
+                    return (
+                      <tr key={c.id} style={{ opacity: isSold ? 0.75 : 0.9, background: isSold ? 'var(--color-success-bg, #f0fdf4)' : undefined }}>
+                        <td>{c.owner}</td>
+                        <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
+                        <td>
+                          {c.ear_tag}
+                          {isSold && <span className="badge success" style={{ marginLeft: 6, fontSize: 11 }}>Sold</span>}
+                        </td>
+                        <td>{isSold ? <span className="badge success">Sold</span> : <span className="badge warning">Pending sale</span>}</td>
+                        <td><span className="badge neutral">{c.transfer_type === 'kitai' ? 'Kitai' : c.transfer_type === 'sold' ? 'Sold' : (c.transfer_type || '—')}</span></td>
+                        <td>{c.transfer_date || <span className="faint">—</span>}</td>
+                        <td>{c.transfer_customer || <span className="faint">—</span>}</td>
+                        <td>{c.transfer_invoice_number || <span className="faint">—</span>}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+                            {!isSold
+                              ? <button className="primary" style={{ fontSize: 12 }} onClick={() => markSold(c.id)}>Mark sold</button>
+                              : <button style={{ fontSize: 12 }} onClick={() => markUnsold(c.id)}>Revert</button>
+                            }
+                            <button style={{ fontSize: 12 }} onClick={() => unarchive(c.id)}>Restore</button>
+                            <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteRecord(c.id)}>Remove</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
-                <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={7}>Total</td><td style={{ textAlign: 'right' }}>{archived.length}</td></tr></tfoot>
+                <tfoot>
+                  <tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}>
+                    <td colSpan={3}>Total</td>
+                    <td colSpan={2} style={{ color: 'var(--color-success-text, #15803d)' }}>{archived.filter(r => r.transfer_type === 'sold').length} sold</td>
+                    <td colSpan={3}>{archived.filter(r => r.transfer_type !== 'sold').length} pending</td>
+                    <td style={{ textAlign: 'right' }}>{archived.length}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )
