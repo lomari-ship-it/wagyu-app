@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import { supabase, OWNERS } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
-
 
 const BUCKET = 'batch-documents'
 
@@ -12,12 +11,10 @@ function fmtCurrency(val) {
   return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-
 export default function Batches() {
   const [batches, setBatches] = useState([])
   const [calves, setCalves] = useState([])
   const [loading, setLoading] = useState(true)
-  const [owner, setOwner] = useState('')
   const [selectedCalfIds, setSelectedCalfIds] = useState(new Set())
   const [creating, setCreating] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
@@ -37,7 +34,6 @@ export default function Batches() {
     setLoading(false)
   }
 
-  // Collect all calf IDs already in a batch
   const batchedCalfIds = new Set(batches.flatMap((b) => b.calf_ids || []))
   const searchLower = calfSearch.toLowerCase()
   const filteredCalves = calves.filter((c) => !c.sold_flag && !batchedCalfIds.has(c.id) &&
@@ -60,23 +56,53 @@ export default function Batches() {
   async function createBatch() {
     if (selectedCalfIds.size === 0) return
     setCreating(true); setStatusMsg('Creating batch...')
-    const selected2 = calves.filter((c) => selectedCalfIds.has(c.id))
-    const ownerList = [...new Set(selected2.map(c => c.owner))]
-    const { error } = await supabase.from('batches').insert({
-      owner: ownerList[0],  // primary owner; full breakdown via calf_summaries
+
+    const selected = calves.filter((c) => selectedCalfIds.has(c.id))
+    const ownerList = [...new Set(selected.map(c => c.owner))]
+
+    const { data: newBatch, error } = await supabase.from('batches').insert({
+      owner: ownerList[0],
       calf_ids: Array.from(selectedCalfIds),
-      calf_summaries: selected2.map((c) => ({ id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date })),
-    })
-    if (error) { setStatusMsg('Failed: ' + error.message) }
-    else {
-      setStatusMsg('Batch created.'); setSelectedCalfIds(new Set()); loadAll(); setTimeout(() => setStatusMsg(''), 2500)
-    }
+      calf_summaries: selected.map((c) => ({
+        id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date
+      })),
+    }).select().single()
+
+    if (error) { setStatusMsg('Failed: ' + error.message); setCreating(false); return }
+
+    setStatusMsg('Generating submission form...')
+    await generateAndAttachSubmissionForm(newBatch, selected)
+
+    setStatusMsg('Batch created.'); setSelectedCalfIds(new Set()); loadAll()
+    setTimeout(() => setStatusMsg(''), 3000)
     setCreating(false)
+  }
+
+  async function generateAndAttachSubmissionForm(batch, batchCalves) {
+    try {
+      const res = await fetch('/api/generate-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ calves: batchCalves, batch }),
+      })
+      if (!res.ok) { console.error('Submission form generation failed:', await res.text()); return }
+      const blob = await res.blob()
+      const fileName = `batch_submission_${batch.id}.xlsx`
+      const path = `${batch.id}/submission/${fileName}`
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true })
+      if (upErr) { console.error('Upload failed:', upErr.message); return }
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
+      await supabase.from('batches').update({
+        submission_file_name: fileName,
+        submission_file_url: urlData.publicUrl,
+      }).eq('id', batch.id)
+    } catch (e) {
+      console.error('Auto-attach submission form error:', e)
+    }
   }
 
   async function updateBatch(id, field, value) {
     const updates = { [field]: value || null }
-    // Auto-calculate total amount when rate or qty changes
     const batch = batches.find(b => b.id === id)
     if (batch) {
       const rate = field === 'rate_per_test' ? (value ? parseFloat(value) : null) : batch.rate_per_test
@@ -107,49 +133,66 @@ export default function Batches() {
             <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: unbatchedOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
           </div>
         </div>
-        {unbatchedOpen && <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-        <div style={{ marginTop: 12, marginBottom: 12 }}>
-          <input
-            type="text"
-            value={calfSearch}
-            onChange={(e) => { e.stopPropagation(); setCalfSearch(e.target.value) }}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="Search by ear tag or identity number..."
-            style={{ width: '100%', maxWidth: 360 }}
-          />
-        </div>
-        {filteredCalves.length === 0 && !calfSearch && <p className="muted">No active calves available (all already batched or none registered).</p>}
-        {filteredCalves.length === 0 && calfSearch && <p className="muted">No calves match "{calfSearch}".</p>}
-        {(filteredCalves.length > 0 || selectedCalfIds.size > 0) && (
-          <>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="muted">{filteredCalves.length} calf entr{filteredCalves.length !== 1 ? 'ies' : 'y'} shown &middot; {selectedCalfIds.size} selected</span>
-              <button onClick={(e) => { e.stopPropagation(); selectAll() }} style={{ fontSize: 13 }}>{filteredCalves.every((c) => selectedCalfIds.has(c.id)) ? 'Deselect all' : 'Select all'}</button>
+        {unbatchedOpen && (
+          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+            <div style={{ marginTop: 12, marginBottom: 12 }}>
+              <input
+                type="text"
+                value={calfSearch}
+                onChange={(e) => { e.stopPropagation(); setCalfSearch(e.target.value) }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Search by ear tag or identity number..."
+                style={{ width: '100%', maxWidth: 360 }}
+              />
             </div>
-            <div className="stack" style={{ gap: 6, marginBottom: 12 }}>
-              {filteredCalves.map((c) => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedCalfIds.has(c.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
-                  <input type="checkbox" checked={selectedCalfIds.has(c.id)} onChange={() => toggleCalf(c.id)} style={{ width: 'auto' }} />
-                  <span><strong>{c.ear_tag}</strong></span>
-                  {[c.identity_number, c.ear_tag].filter(Boolean).join(' // ') && <span className="muted">{[c.identity_number, c.ear_tag].filter(Boolean).join(' // ')}</span>}
-                  <span className="muted">{formatDate(c.birth_date)}</span>
-                </label>
-              ))}
-            </div>
-            <div className="row">
-              <button className="primary" disabled={creating || selectedCalfIds.size === 0} onClick={createBatch}>Create batch ({selectedCalfIds.size} calves)</button>
-              <span className="muted">{statusMsg}</span>
-            </div>
-          </>
+            {filteredCalves.length === 0 && !calfSearch && <p className="muted">No active calves available (all already batched or none registered).</p>}
+            {filteredCalves.length === 0 && calfSearch && <p className="muted">No calves match "{calfSearch}".</p>}
+            {(filteredCalves.length > 0 || selectedCalfIds.size > 0) && (
+              <>
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span className="muted">{filteredCalves.length} calf entr{filteredCalves.length !== 1 ? 'ies' : 'y'} shown · {selectedCalfIds.size} selected</span>
+                  <button onClick={(e) => { e.stopPropagation(); selectAll() }} style={{ fontSize: 13 }}>
+                    {filteredCalves.every((c) => selectedCalfIds.has(c.id)) ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <div className="stack" style={{ gap: 6, marginBottom: 12 }}>
+                  {filteredCalves.map((c) => (
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedCalfIds.has(c.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
+                      <input type="checkbox" checked={selectedCalfIds.has(c.id)} onChange={() => toggleCalf(c.id)} style={{ width: 'auto' }} />
+                      <span><strong>{c.ear_tag}</strong></span>
+                      {c.identity_number && <span className="muted">{c.identity_number}</span>}
+                      <span className="muted">{formatDate(c.birth_date)}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="row">
+                  <button className="primary" disabled={creating || selectedCalfIds.size === 0} onClick={createBatch}>
+                    Create batch ({selectedCalfIds.size} calves)
+                  </button>
+                  <span className="muted">{statusMsg}</span>
+                </div>
+              </>
+            )}
+          </div>
         )}
-        </div>}
       </div>
 
       <div>
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Batches</h2>
         {batches.length === 0 ? <p className="muted">No batches yet.</p> : (
           <div className="stack">
-            {batches.map((b) => <BatchCard key={b.id} batch={b} calves={calves} onUpdate={updateBatch} onDelete={deleteBatch} onReload={loadAll} />)}
+            {batches.map((b) => (
+              <BatchCard
+                key={b.id}
+                batch={b}
+                calves={calves}
+                allCalves={calves}
+                batchedCalfIds={batchedCalfIds}
+                onUpdate={updateBatch}
+                onDelete={deleteBatch}
+                onReload={loadAll}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -170,11 +213,10 @@ function FileUploadField({ label, fileName, fileUrl, fieldName, batchId, onReloa
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
     if (upErr) { setMsg('Upload failed: ' + upErr.message); setUploading(false); return }
     const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
-    const updates = {
+    await supabase.from('batches').update({
       [`${fieldName}_file_name`]: file.name,
       [`${fieldName}_file_url`]: urlData.publicUrl,
-    }
-    await supabase.from('batches').update(updates).eq('id', batchId)
+    }).eq('id', batchId)
     setMsg(''); setUploading(false); onReload()
   }
 
@@ -196,7 +238,7 @@ function FileUploadField({ label, fileName, fileUrl, fieldName, batchId, onReloa
         </div>
       ) : (
         <div className="row" style={{ gap: 6 }}>
-          <input ref={inputRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleUpload} />
+          <input ref={inputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls" style={{ display: 'none' }} onChange={handleUpload} />
           <button disabled={uploading} onClick={() => inputRef.current.click()} style={{ fontSize: 13 }}>
             {uploading ? 'Uploading...' : 'Upload file'}
           </button>
@@ -211,18 +253,15 @@ async function generateBook(batch, calves) {
   const summaries = batch.calf_summaries || []
   const calfIds = batch.calf_ids || []
   let batchCalves = []
-
   if (summaries.length > 0) {
-    // Match full calf data from calves array using id or ear tag
     batchCalves = summaries.map(s => {
       const found = calves.find(c => c.id === s.id || c.ear_tag === s.earTag)
       return found || s
     })
   } else if (calfIds.length > 0) {
-    // Fallback: use calf_ids to find calves directly
     batchCalves = calves.filter(c => calfIds.includes(c.id))
   } else {
-    alert('No calf data found for this batch. Please recreate the batch.')
+    alert('No calf data found for this batch.')
     return
   }
   try {
@@ -244,9 +283,52 @@ async function generateBook(batch, calves) {
   }
 }
 
-function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
+async function reGenerateSubmission(batch, calves, onReload) {
+  const summaries = batch.calf_summaries || []
+  const calfIds = batch.calf_ids || []
+  let batchCalves = []
+  if (summaries.length > 0) {
+    batchCalves = summaries.map(s => {
+      const found = calves.find(c => c.id === s.id || c.ear_tag === s.earTag)
+      return found || s
+    })
+  } else if (calfIds.length > 0) {
+    batchCalves = calves.filter(c => calfIds.includes(c.id))
+  }
+  if (batchCalves.length === 0) { alert('No calves found for this batch.'); return }
+
+  try {
+    const res = await fetch('/api/generate-submission', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calves: batchCalves, batch }),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const blob = await res.blob()
+    const fileName = `batch_submission_${batch.id}.xlsx`
+    const path = `${batch.id}/submission/${fileName}`
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true })
+    if (upErr) throw new Error(upErr.message)
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
+    await supabase.from('batches').update({
+      submission_file_name: fileName,
+      submission_file_url: urlData.publicUrl,
+    }).eq('id', batch.id)
+    onReload()
+  } catch (e) {
+    alert('Failed to regenerate: ' + e.message)
+  }
+}
+
+function BatchCard({ batch, calves, allCalves, batchedCalfIds, onUpdate, onDelete, onReload }) {
   const [calvesOpen, setCalvesOpen] = useState(false)
   const [batchOpen, setBatchOpen] = useState(false)
+  const [editingCalves, setEditingCalves] = useState(false)
+  const [editSearch, setEditSearch] = useState('')
+  const [editSelectedIds, setEditSelectedIds] = useState(new Set())
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [regenMsg, setRegenMsg] = useState('')
+
   const summaries = batch.calf_summaries || []
   const isPending = !batch.submission_date || !batch.batch_report_number
   const hasInvoice = batch.invoice_number || batch.invoice_date
@@ -255,10 +337,56 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
   const calfCount = summaries.length
   const hasDiscrepancy = testCount > 0 && calfCount > 0 && testCount !== calfCount
 
+  const thisBatchCalfIds = new Set(batch.calf_ids || [])
+  const editableCalves = allCalves.filter(c =>
+    !c.sold_flag && (thisBatchCalfIds.has(c.id) || !batchedCalfIds.has(c.id))
+  )
+
+  function startEditing() {
+    setEditSelectedIds(new Set(batch.calf_ids || []))
+    setEditSearch('')
+    setEditingCalves(true)
+  }
+
+  function toggleEdit(id) {
+    setEditSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  async function saveCalvesEdit() {
+    if (editSelectedIds.size === 0) { alert('A batch must have at least one calf.'); return }
+    setSavingEdit(true)
+    const selected = allCalves.filter(c => editSelectedIds.has(c.id))
+    const ownerList = [...new Set(selected.map(c => c.owner))]
+    const { error } = await supabase.from('batches').update({
+      owner: ownerList[0],
+      calf_ids: Array.from(editSelectedIds),
+      calf_summaries: selected.map(c => ({
+        id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date
+      })),
+    }).eq('id', batch.id)
+    if (error) { alert('Save failed: ' + error.message); setSavingEdit(false); return }
+
+    setRegenMsg('Regenerating submission form...')
+    await reGenerateSubmission({ ...batch, calf_ids: Array.from(editSelectedIds) }, selected, onReload)
+    setRegenMsg('')
+    setSavingEdit(false)
+    setEditingCalves(false)
+    onReload()
+  }
+
+  const editSearchLower = editSearch.toLowerCase()
+  const filteredEditable = editableCalves.filter(c =>
+    !editSearch ||
+    (c.ear_tag||'').toLowerCase().includes(editSearchLower) ||
+    (c.identity_number||'').toLowerCase().includes(editSearchLower)
+  )
+
   return (
     <div className="card" style={{ padding: 0 }}>
-
-      {/* Clickable header */}
       <div
         onClick={() => setBatchOpen(v => !v)}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
@@ -283,27 +411,59 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
         <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: batchOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
       </div>
 
-      {/* Collapsible content */}
       {batchOpen && (
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-
-          {/* Calves toggle */}
           <div style={{ marginTop: 12, marginBottom: 8 }}>
-            <button onClick={() => setCalvesOpen(v => !v)} style={{ fontSize: 12, padding: '2px 8px', background: 'var(--color-accent-light)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
-              {calvesOpen ? 'Hide calves ▲' : `Show ${summaries.length} calves ▼`}
-            </button>
-            {calvesOpen && (
-              <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '2px 12px' }}>
-                {summaries.map((s, i) => (
-                  <div key={i} className="muted" style={{ fontSize: 12, padding: '2px 0' }}>
-                    {i + 1}. {[s.identityNumber, s.earTag].filter(Boolean).join(' // ')}
+            {!editingCalves ? (
+              <>
+                <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                  <button onClick={() => setCalvesOpen(v => !v)} style={{ fontSize: 12, padding: '2px 8px', background: 'var(--color-accent-light)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
+                    {calvesOpen ? 'Hide calves ▲' : `Show ${summaries.length} calves ▼`}
+                  </button>
+                  <button onClick={startEditing} style={{ fontSize: 12, padding: '2px 8px', background: 'var(--color-accent-light)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
+                    ✏ Edit calves
+                  </button>
+                </div>
+                {calvesOpen && (
+                  <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '2px 12px' }}>
+                    {summaries.map((s, i) => (
+                      <div key={i} className="muted" style={{ fontSize: 12, padding: '2px 0' }}>
+                        {i + 1}. {[s.identityNumber, s.earTag].filter(Boolean).join(' // ')}
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+              </>
+            ) : (
+              <div style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, background: 'var(--color-accent-light)' }}>
+                <div style={{ fontWeight: 500, marginBottom: 8, fontSize: 13 }}>Edit calves in batch — {editSelectedIds.size} selected</div>
+                <input
+                  type="text"
+                  value={editSearch}
+                  onChange={e => setEditSearch(e.target.value)}
+                  placeholder="Search by ear tag or identity number..."
+                  style={{ width: '100%', maxWidth: 320, marginBottom: 8 }}
+                />
+                <div className="stack" style={{ gap: 4, maxHeight: 240, overflowY: 'auto', marginBottom: 8 }}>
+                  {filteredEditable.map(c => (
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer', background: editSelectedIds.has(c.id) ? 'white' : 'var(--color-surface)', fontSize: 13 }}>
+                      <input type="checkbox" checked={editSelectedIds.has(c.id)} onChange={() => toggleEdit(c.id)} style={{ width: 'auto' }} />
+                      <strong>{c.ear_tag}</strong>
+                      {c.identity_number && <span className="muted">{c.identity_number}</span>}
+                      <span className="muted">{formatDate(c.birth_date)}</span>
+                      {thisBatchCalfIds.has(c.id) && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>(in batch)</span>}
+                    </label>
+                  ))}
+                </div>
+                {regenMsg && <p className="muted" style={{ fontSize: 12 }}>{regenMsg}</p>}
+                <div className="row" style={{ gap: 8 }}>
+                  <button className="primary" disabled={savingEdit} onClick={saveCalvesEdit}>{savingEdit ? 'Saving...' : 'Save changes'}</button>
+                  <button disabled={savingEdit} onClick={() => setEditingCalves(false)}>Cancel</button>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Submission */}
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
             <div className="muted" style={{ fontWeight: 500, marginBottom: 6, fontSize: 12 }}>Submission</div>
             <div className="row">
@@ -318,7 +478,6 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
             </div>
           </div>
 
-          {/* Invoice */}
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
             <div className="muted" style={{ fontWeight: 500, marginBottom: 6, fontSize: 12 }}>NSBA invoice</div>
             <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -352,10 +511,55 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
             </div>
           </div>
 
-          {/* Documents */}
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
             <div className="muted" style={{ fontWeight: 500, marginBottom: 8, fontSize: 12 }}>Documents</div>
             <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  Batch Submission Form
+                  {batch.submission_file_url && (
+                    <button
+                      onClick={async () => {
+                        setRegenMsg('Regenerating...')
+                        const batchCalves = (batch.calf_summaries || []).map(s => {
+                          const found = allCalves.find(c => c.id === s.id || c.ear_tag === s.earTag)
+                          return found || s
+                        })
+                        await reGenerateSubmission(batch, batchCalves, onReload)
+                        setRegenMsg('')
+                      }}
+                      style={{ fontSize: 11, padding: '1px 6px', background: 'var(--color-accent-light)', border: '1px solid var(--color-border)', borderRadius: 4 }}
+                    >↺ Regen</button>
+                  )}
+                </label>
+                {batch.submission_file_url ? (
+                  <div className="row" style={{ gap: 6 }}>
+                    <a href={batch.submission_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {batch.submission_file_name}</a>
+                    <button className="danger-text" style={{ fontSize: 12 }} onClick={async () => {
+                      await supabase.from('batches').update({ submission_file_name: null, submission_file_url: null }).eq('id', batch.id)
+                      onReload()
+                    }}>Remove</button>
+                  </div>
+                ) : (
+                  <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                    <span className="muted" style={{ fontSize: 12 }}>Not generated</span>
+                    <button
+                      onClick={async () => {
+                        setRegenMsg('Generating...')
+                        const batchCalves = (batch.calf_summaries || []).map(s => {
+                          const found = allCalves.find(c => c.id === s.id || c.ear_tag === s.earTag)
+                          return found || s
+                        })
+                        await reGenerateSubmission(batch, batchCalves, onReload)
+                        setRegenMsg('')
+                      }}
+                      style={{ fontSize: 12 }}
+                    >Generate now</button>
+                  </div>
+                )}
+                {regenMsg && <span className="muted" style={{ fontSize: 11 }}>{regenMsg}</span>}
+              </div>
+
               <FileUploadField
                 label="Batch Detail Report (Unistel)"
                 fileName={batch.batch_report_file_name}
@@ -364,8 +568,9 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
                 batchId={batch.id}
                 onReload={onReload}
               />
+
               <FileUploadField
-                label="NSBA invoice"
+                label="NSBA Invoice"
                 fileName={batch.invoice_file_name}
                 fileUrl={batch.invoice_file_url}
                 fieldName="invoice"
@@ -375,9 +580,13 @@ function BatchCard({ batch, calves, onUpdate, onDelete, onReload }) {
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button className="primary" onClick={() => generateBook(batch, calves)}>Generate birth notification</button>
+            <button className="danger-text" style={{ fontSize: 13 }} onClick={() => {
+              if (window.confirm('Delete this batch? This cannot be undone.')) onDelete(batch.id)
+            }}>Delete batch</button>
           </div>
+
         </div>
       )}
     </div>
