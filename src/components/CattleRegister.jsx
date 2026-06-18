@@ -45,7 +45,7 @@ export default function CattleRegister() {
     setLoading(false)
   }
 
-  async function syncExistingData(overwrite = false) {
+  async function syncExistingData() {
     const [{ data: calvesData }, { data: cattleData }] = await Promise.all([
       supabase.from('calves').select('ear_tag, identity_number, birth_date, sex, mother_id, father_id, breed'),
       supabase.from('cattle_register').select('id, ear_tag, sex, date_of_birth, breed, mother_id, father_id, identity_number'),
@@ -59,12 +59,12 @@ export default function CattleRegister() {
       const calf = calfMap[cattle.ear_tag]
       if (!calf) continue
       const updates = {}
-      if ((overwrite || isEmpty(cattle.sex)) && calf.sex) updates.sex = calf.sex
-      if ((overwrite || isEmpty(cattle.date_of_birth)) && calf.birth_date) updates.date_of_birth = calf.birth_date
-      if ((overwrite || isEmpty(cattle.breed)) && calf.breed) updates.breed = calf.breed
-      if ((overwrite || isEmpty(cattle.mother_id)) && calf.mother_id) updates.mother_id = calf.mother_id
-      if ((overwrite || isEmpty(cattle.father_id)) && calf.father_id) updates.father_id = calf.father_id
-      if ((overwrite || isEmpty(cattle.identity_number)) && calf.identity_number) updates.identity_number = calf.identity_number
+      if (isEmpty(cattle.sex) && calf.sex) updates.sex = calf.sex
+      if (isEmpty(cattle.date_of_birth) && calf.birth_date) updates.date_of_birth = calf.birth_date
+      if (isEmpty(cattle.breed) && calf.breed) updates.breed = calf.breed
+      if (isEmpty(cattle.mother_id) && calf.mother_id) updates.mother_id = calf.mother_id
+      if (isEmpty(cattle.father_id) && calf.father_id) updates.father_id = calf.father_id
+      if (isEmpty(cattle.identity_number) && calf.identity_number) updates.identity_number = calf.identity_number
       if (Object.keys(updates).length > 0) {
         await supabase.from('cattle_register').update(updates).eq('id', cattle.id)
         updated++
@@ -159,19 +159,19 @@ export default function CattleRegister() {
   }
 
   // Summary stats
-  const totalActive = breeding.length + general.length
   const totalTransferred = archived.length
-  const breedCounts = {}
-  const sexCounts = { Male: 0, Female: 0, Unknown: 0 }
-  breeding.forEach(r => {
-    const b = r.breed || 'Unknown'
-    breedCounts[b] = (breedCounts[b] || 0) + 1
-    if (r.sex === 'Male') sexCounts.Male++
-    else if (r.sex === 'Female') sexCounts.Female++
-    else sexCounts.Unknown++
+  const totalSold = archived.filter(r => r.transfer_type === 'sold').length
+  const totalPending = archived.filter(r => r.transfer_type !== 'sold').length
+
+  // Per-owner breakdown for archived
+  const ownerArchived = {}
+  archived.forEach(r => {
+    const o = r.owner || 'Unknown'
+    if (!ownerArchived[o]) ownerArchived[o] = { total: 0, pending: 0, sold: 0 }
+    ownerArchived[o].total++
+    if (r.transfer_type === 'sold') ownerArchived[o].sold++
+    else ownerArchived[o].pending++
   })
-  const ownerCounts = {}
-  ;[...breeding, ...general].forEach(r => { ownerCounts[r.owner] = (ownerCounts[r.owner] || 0) + 1 })
 
   function SectionHeader({ title, count, open, onToggle }) {
     return (
@@ -252,80 +252,56 @@ export default function CattleRegister() {
 
       {/* ── Summary (non-collapsible) ── */}
       <div className="card">
-        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>Summary</h2>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 24 }}>
+        <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600 }}>Summary</h2>
 
-          <div style={{ minWidth: 160 }}>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Totals</div>
-            <div className="stack" style={{ gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
-                <span>Breeding animals</span><strong>{breeding.length}</strong>
-              </div>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
-                <span>General cattle</span><strong>{general.length}</strong>
-              </div>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 24, borderTop: '1px solid var(--color-border)', paddingTop: 6 }}>
-                <span style={{ fontWeight: 500 }}>Total active</span><strong>{totalActive}</strong>
-              </div>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 24, color: 'var(--color-text-muted)' }}>
-                <span>Transferred / sold</span><strong>{totalTransferred}</strong>
-              </div>
-            </div>
+        {/* Stat cards */}
+        <div className="row" style={{ gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Total transferred</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text)' }}>{totalTransferred}</div>
           </div>
-
-          <div style={{ minWidth: 160 }}>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Breeding — Sex</div>
-            <div className="stack" style={{ gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
-                <span>Bulls (Male)</span><strong>{sexCounts.Male}</strong>
-              </div>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
-                <span>Cows / Heifers (Female)</span><strong>{sexCounts.Female}</strong>
-              </div>
-              {sexCounts.Unknown > 0 && (
-                <div className="row" style={{ justifyContent: 'space-between', gap: 24, color: 'var(--color-text-muted)' }}>
-                  <span>Unknown</span><strong>{sexCounts.Unknown}</strong>
-                </div>
-              )}
-            </div>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Pending sale</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-warning-text, #92400e)' }}>{totalPending}</div>
           </div>
-
-          {Object.keys(breedCounts).length > 0 && (
-            <div style={{ minWidth: 160 }}>
-              <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Breeding — Breed</div>
-              <div className="stack" style={{ gap: 6 }}>
-                {Object.entries(breedCounts).sort((a,b) => b[1]-a[1]).map(([breed, count]) => (
-                  <div key={breed} className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
-                    <span>{breed}</span><strong>{count}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {Object.keys(ownerCounts).length > 0 && (
-            <div style={{ minWidth: 160 }}>
-              <div className="muted" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active — By Owner</div>
-              <div className="stack" style={{ gap: 6 }}>
-                {Object.entries(ownerCounts).sort((a,b) => b[1]-a[1]).map(([owner, count]) => (
-                  <div key={owner} className="row" style={{ justifyContent: 'space-between', gap: 24 }}>
-                    <span>{owner}</span><strong>{count}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Sold / invoiced</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-success-text, #15803d)' }}>{totalSold}</div>
+          </div>
         </div>
+
+        {/* Per-owner table */}
+        {Object.keys(ownerArchived).length > 0 && (
+          <table style={{ width: '100%', fontSize: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <th style={{ textAlign: 'left', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Owner</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pending Sale</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sold / Invoiced</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(ownerArchived).sort((a,b) => a[0].localeCompare(b[0])).map(([owner, d]) => (
+                <tr key={owner} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <td style={{ padding: '10px 0' }}>{owner}</td>
+                  <td style={{ textAlign: 'right', padding: '10px 0' }}>{d.total}</td>
+                  <td style={{ textAlign: 'right', padding: '10px 0', color: d.pending > 0 ? 'var(--color-warning-text, #92400e)' : 'inherit' }}>{d.pending > 0 ? d.pending : '—'}</td>
+                  <td style={{ textAlign: 'right', padding: '10px 0' }}>{d.sold > 0 ? d.sold : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {Object.keys(ownerArchived).length === 0 && !loading && (
+          <p className="muted" style={{ margin: 0 }}>No transferred animals yet.</p>
+        )}
       </div>
 
       {/* ── Search + Sync ── */}
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ear tag or identity number..." style={{ width: '100%', maxWidth: 360 }} />
-        <div className="row" style={{ gap: 4 }}>
-          <button style={{ fontSize: 12 }} onClick={() => syncExistingData(false)}>Sync from calves (fill missing)</button>
-          <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('This will overwrite existing cattle register data with calf registration data. Continue?')) syncExistingData(true) }}>Sync from calves (overwrite all)</button>
-        </div>
+        <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('Sync cattle register from calf registrations? This will fill in any missing fields.')) syncExistingData() }}>Sync</button>
       </div>
 
       {/* ── Breeding animals ── */}
@@ -441,10 +417,7 @@ export default function CattleRegister() {
                       <tr key={c.id} style={{ opacity: isSold ? 0.75 : 0.9, background: isSold ? 'var(--color-success-bg, #f0fdf4)' : undefined }}>
                         <td>{c.owner}</td>
                         <td>{(!c.identity_number || c.identity_number === 'NULL') ? <span className="faint">—</span> : c.identity_number}</td>
-                        <td>
-                          {c.ear_tag}
-                          {isSold && <span className="badge success" style={{ marginLeft: 6, fontSize: 11 }}>Sold</span>}
-                        </td>
+                        <td>{c.ear_tag}{isSold && <span className="badge success" style={{ marginLeft: 6, fontSize: 11 }}>Sold</span>}</td>
                         <td>{isSold ? <span className="badge success">Sold</span> : <span className="badge warning">Pending sale</span>}</td>
                         <td><span className="badge neutral">{c.transfer_type === 'kitai' ? 'Kitai' : c.transfer_type === 'sold' ? 'Sold' : (c.transfer_type || '—')}</span></td>
                         <td>{c.transfer_date || <span className="faint">—</span>}</td>
@@ -467,8 +440,8 @@ export default function CattleRegister() {
                 <tfoot>
                   <tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}>
                     <td colSpan={3}>Total</td>
-                    <td colSpan={2} style={{ color: 'var(--color-success-text, #15803d)' }}>{archived.filter(r => r.transfer_type === 'sold').length} sold</td>
-                    <td colSpan={3}>{archived.filter(r => r.transfer_type !== 'sold').length} pending</td>
+                    <td colSpan={2} style={{ color: 'var(--color-success-text, #15803d)' }}>{totalSold} sold</td>
+                    <td colSpan={3}>{totalPending} pending</td>
                     <td style={{ textAlign: 'right' }}>{archived.length}</td>
                   </tr>
                 </tfoot>
