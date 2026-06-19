@@ -11,15 +11,18 @@ function fmtCurrency(val) {
   return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function Batches() {
+export default function Batches({ search: parentSearch = '', onSearchChange }) {
   const [batches, setBatches] = useState([])
   const [calves, setCalves] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedCalfIds, setSelectedCalfIds] = useState(new Set())
   const [creating, setCreating] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
-  const [unbatchedOpen, setUnbatchedOpen] = useState(true)
-  const [calfSearch, setCalfSearch] = useState('')
+  const [unbatchedOpen, setUnbatchedOpen] = useState(false)
+  const [batchesOpen, setBatchesOpen] = useState(false)
+  const [localSearch, setLocalSearch] = useState(parentSearch)
+  const calfSearch = onSearchChange ? parentSearch : localSearch
+  const setCalfSearch = onSearchChange || setLocalSearch
 
   useEffect(() => { loadAll() }, [])
 
@@ -120,8 +123,44 @@ export default function Batches() {
 
   if (loading) return <p className="muted">Loading...</p>
 
+  const totalCalves = calves.filter((c) => !c.sold_flag).length
+  const totalBatches = batches.length
+  const invoicedBatches = batches.filter((b) => b.invoice_number).length
+  const pendingBatches = totalBatches - invoicedBatches
+
   return (
     <div className="stack" style={{ gap: 24 }}>
+
+      {/* Non-collapsible summary */}
+      <div className="card">
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>Summary</h2>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Unbatched calves</div>
+            <div style={{ fontSize: 32, fontWeight: 600 }}>{filteredCalves.length}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Total batches</div>
+            <div style={{ fontSize: 32, fontWeight: 600 }}>{totalBatches}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Pending invoice</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-warning-text, #92400e)' }}>{pendingBatches}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Invoiced</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-success-text, #15803d)' }}>{invoicedBatches}</div>
+          </div>
+        </div>
+        <input
+          type="text"
+          value={calfSearch}
+          onChange={(e) => setCalfSearch(e.target.value)}
+          placeholder="Search by ear tag or identity number..."
+          style={{ width: '100%', maxWidth: 360 }}
+        />
+      </div>
+
       <div className="card" style={{ padding: 0 }}>
         <div
           onClick={() => setUnbatchedOpen(v => !v)}
@@ -135,16 +174,7 @@ export default function Batches() {
         </div>
         {unbatchedOpen && (
           <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-            <div style={{ marginTop: 12, marginBottom: 12 }}>
-              <input
-                type="text"
-                value={calfSearch}
-                onChange={(e) => { e.stopPropagation(); setCalfSearch(e.target.value) }}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Search by ear tag or identity number..."
-                style={{ width: '100%', maxWidth: 360 }}
-              />
-            </div>
+            <div style={{ marginTop: 12 }} />
             {filteredCalves.length === 0 && !calfSearch && <p className="muted">No active calves available (all already batched or none registered).</p>}
             {filteredCalves.length === 0 && calfSearch && <p className="muted">No calves match "{calfSearch}".</p>}
             {(filteredCalves.length > 0 || selectedCalfIds.size > 0) && (
@@ -177,22 +207,35 @@ export default function Batches() {
         )}
       </div>
 
-      <div>
-        <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Batches</h2>
-        {batches.length === 0 ? <p className="muted">No batches yet.</p> : (
-          <div className="stack">
-            {batches.map((b) => (
-              <BatchCard
-                key={b.id}
-                batch={b}
-                calves={calves}
-                allCalves={calves}
-                batchedCalfIds={batchedCalfIds}
-                onUpdate={updateBatch}
-                onDelete={deleteBatch}
-                onReload={loadAll}
-              />
-            ))}
+      <div className="card" style={{ padding: 0 }}>
+        <div
+          onClick={() => setBatchesOpen(v => !v)}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
+        >
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Batches</h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className="muted">{batches.length} batch{batches.length !== 1 ? 'es' : ''}</span>
+            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: batchesOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+          </div>
+        </div>
+        {batchesOpen && (
+          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+            {batches.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No batches yet.</p> : (
+              <div className="stack" style={{ marginTop: 12 }}>
+                {batches.map((b) => (
+                  <BatchCard
+                    key={b.id}
+                    batch={b}
+                    calves={calves}
+                    allCalves={calves}
+                    batchedCalfIds={batchedCalfIds}
+                    onUpdate={updateBatch}
+                    onDelete={deleteBatch}
+                    onReload={loadAll}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
