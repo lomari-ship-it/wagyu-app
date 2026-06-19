@@ -9,19 +9,22 @@ const emptyForm = {
   color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
 }
 
-export default function CalfRegistration() {
+export default function CalfRegistration({ search: parentSearch = '', onSearchChange }) {
   const [form, setForm] = useState(emptyForm)
   const [calves, setCalves] = useState([])
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
-  const [search, setSearch] = useState('')
+  const [localSearch, setLocalSearch] = useState(parentSearch)
   const [editingId, setEditingId] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [editForm, setEditForm] = useState({})
+  const [listOpen, setListOpen] = useState(false)
+  const search = onSearchChange ? parentSearch : localSearch
+  const setSearch = onSearchChange || setLocalSearch
 
   useEffect(() => { loadCalves() }, [])
 
@@ -209,7 +212,7 @@ export default function CalfRegistration() {
     <div className="stack" style={{ gap: 24 }}>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Calf registration</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Calf Registrations</h2>
           <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span className="muted">{calves.length} entries</span>
             <div className="row" style={{ gap: 6 }}>
@@ -230,6 +233,15 @@ export default function CalfRegistration() {
               </div>
             </div>
           )}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by ear tag or identity number..."
+            style={{ width: '100%', maxWidth: 360 }}
+          />
         </div>
         <form onSubmit={handleSubmit} className="grid-form" style={{ marginBottom: 12 }}>
           <div>
@@ -320,27 +332,33 @@ export default function CalfRegistration() {
         </form>
       </div>
 
-      <div style={{ marginBottom: 8 }}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by ear tag or identity number..."
-          style={{ width: '100%', maxWidth: 360 }}
-        />
-      </div>
-
-      {loading ? <p className="muted">Loading...</p> : displayed.length === 0 ? (
-        <p className="muted">{showSold ? 'No calf entries saved yet.' : 'No active calf entries.'}</p>
-      ) : (
-        <div className="stack">
-          {displayed.map((c) =>
-            editingId === c.id
-              ? <EditCalfCard key={c.id} calf={c} editForm={editForm} setEditForm={setEditForm} onSave={() => saveEdit(c)} onCancel={() => setEditingId(null)} />
-              : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDelete={() => deleteCalf(c.id)} />
-          )}
+      <div className="card" style={{ padding: 0 }}>
+        <div
+          onClick={() => setListOpen(v => !v)}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
+        >
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Registered calves</h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className="muted">{displayed.length} record{displayed.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: listOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+          </div>
         </div>
-      )}
+        {listOpen && (
+          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+            {loading ? <p className="muted" style={{ marginTop: 12 }}>Loading...</p> : displayed.length === 0 ? (
+              <p className="muted" style={{ marginTop: 12 }}>{search ? `No calves match "${search}".` : 'No active calf entries.'}</p>
+            ) : (
+              <div className="stack" style={{ marginTop: 12 }}>
+                {displayed.map((c) =>
+                  editingId === c.id
+                    ? <EditCalfCard key={c.id} calf={c} editForm={editForm} setEditForm={setEditForm} onSave={() => saveEdit(c)} onCancel={() => setEditingId(null)} />
+                    : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDelete={() => deleteCalf(c.id)} />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
