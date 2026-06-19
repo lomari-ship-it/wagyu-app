@@ -948,6 +948,15 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
       animal_summaries: selected.map(t => ({ id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number, owner: t.owner, animalType: t.animal_type })),
     }).select().single()
     if (error) { setCreateMsg('Failed: ' + error.message); setCreating(false); return }
+
+    // Auto-flag sold: mark these transfers sold, and flag the underlying Cattle Register
+    // records as sold too (animal_type 'cattle' transfers carry animal_id = cattle_register.id).
+    await Promise.all(selected.map(t => supabase.from('kitai_transfers').update({ sold_flag: true }).eq('id', t.id)))
+    const cattleIds = selected.filter(t => t.animal_type === 'cattle' && t.animal_id).map(t => t.animal_id)
+    if (cattleIds.length > 0) {
+      await supabase.from('cattle_register').update({ transfer_type: 'sold' }).in('id', cattleIds)
+    }
+
     if (inserted && newInvoiceFile) {
       const path = 'kitai/' + inserted.id + '/' + newInvoiceFile.name
       const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, newInvoiceFile, { upsert: true })
@@ -969,8 +978,6 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
     onReload(); setTimeout(() => setCreateMsg(''), 2500); setCreating(false)
   }
 
-  async function markSold(transferId) { await supabase.from('kitai_transfers').update({ sold_flag: true }).eq('id', transferId); onReload() }
-  async function markUnsold(transferId) { await supabase.from('kitai_transfers').update({ sold_flag: false }).eq('id', transferId); onReload() }
   async function updateInvoice(id, updates) { await supabase.from('kitai_sale_invoices').update(updates).eq('id', id); onReload() }
   async function deleteInvoice(id) { await supabase.from('kitai_sale_invoices').delete().eq('id', id); onReload() }
 
@@ -1116,24 +1123,15 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
                       </div>
                       {isExpanded && (
                         <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-                          <div style={{ marginTop: 12, marginBottom: 8 }} className="row">
-                            {invoiceTransfers.some(t => !t.sold_flag) && (
-                              <button className="primary" style={{ fontSize: 12 }} onClick={async () => {
-                                await Promise.all(invoiceTransfers.filter(t => !t.sold_flag).map(t => markSold(t.id)))
-                              }}>Mark all sold</button>
-                            )}
-                            {invoiceTransfers.some(t => t.sold_flag) && (
-                              <button style={{ fontSize: 12 }} onClick={async () => {
-                                await Promise.all(invoiceTransfers.filter(t => t.sold_flag).map(t => markUnsold(t.id)))
-                              }}>Revert all</button>
-                            )}
+                          <div style={{ marginTop: 12, marginBottom: 8 }}>
+                            <span className="badge success">Sold (auto-flagged on invoice creation)</span>
                           </div>
                           <div className="stack" style={{ gap: 4, marginBottom: 12 }}>
                             {invoiceTransfers.map(t => (
                               <div key={t.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 10px', background: 'var(--color-background-secondary)', borderRadius: 6 }}>
                                 <div className="row" style={{ gap: 8 }}><span className="muted" style={{ fontSize: 11 }}>{t.animal_type?.toUpperCase()}</span><strong>{t.ear_tag}</strong>{t.identity_number && <span className="muted">{t.identity_number}</span>}<span className="muted">{t.owner}</span></div>
                                 <div className="row" style={{ gap: 6 }}>
-                                  {!t.sold_flag ? <button className="primary" style={{ fontSize: 11 }} onClick={() => markSold(t.id)}>Mark sold</button> : <button style={{ fontSize: 11 }} onClick={() => markUnsold(t.id)}>Revert</button>}
+                                  <span className="badge success" style={{ fontSize: 11 }}>Sold</span>
                                 </div>
                               </div>
                             ))}
