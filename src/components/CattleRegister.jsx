@@ -55,18 +55,17 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     if (!calvesData || !cattleData) { alert('Failed to load data for sync.'); return }
     const calfMap = {}
     calvesData.forEach(c => { calfMap[c.ear_tag] = c })
-    const isEmpty = (v) => !v || v === 'NULL'
     let updated = 0
     for (const cattle of cattleData) {
       const calf = calfMap[cattle.ear_tag]
       if (!calf) continue
       const updates = {}
-      if (isEmpty(cattle.sex) && calf.sex) updates.sex = calf.sex
-      if (isEmpty(cattle.date_of_birth) && calf.birth_date) updates.date_of_birth = calf.birth_date
-      if (isEmpty(cattle.breed) && calf.breed) updates.breed = calf.breed
-      if (isEmpty(cattle.mother_id) && calf.mother_id) updates.mother_id = calf.mother_id
-      if (isEmpty(cattle.father_id) && calf.father_id) updates.father_id = calf.father_id
-      if (isEmpty(cattle.identity_number) && calf.identity_number) updates.identity_number = calf.identity_number
+      if (calf.sex && calf.sex !== cattle.sex) updates.sex = calf.sex
+      if (calf.birth_date && calf.birth_date !== cattle.date_of_birth) updates.date_of_birth = calf.birth_date
+      if (calf.breed && calf.breed !== cattle.breed) updates.breed = calf.breed
+      if (calf.mother_id && calf.mother_id !== cattle.mother_id) updates.mother_id = calf.mother_id
+      if (calf.father_id && calf.father_id !== cattle.father_id) updates.father_id = calf.father_id
+      if (calf.identity_number && calf.identity_number !== cattle.identity_number) updates.identity_number = calf.identity_number
       if (Object.keys(updates).length > 0) {
         await supabase.from('cattle_register').update(updates).eq('id', cattle.id)
         updated++
@@ -150,30 +149,30 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     load()
   }
 
-  async function markSold(id) {
-    await supabase.from('cattle_register').update({ transfer_type: 'sold' }).eq('id', id)
-    load()
-  }
-
   async function markUnsold(id) {
     await supabase.from('cattle_register').update({ transfer_type: 'kitai' }).eq('id', id)
     load()
   }
 
   // Summary stats
+  const totalBreeding = breeding.length
+  const totalGeneral = general.length
+  const totalActive = totalBreeding + totalGeneral
   const totalTransferred = archived.length
   const totalSold = archived.filter(r => r.transfer_type === 'sold').length
   const totalPending = archived.filter(r => r.transfer_type !== 'sold').length
+  const totalAll = totalActive + totalTransferred
 
-  // Per-owner breakdown for archived
-  const ownerArchived = {}
-  archived.forEach(r => {
-    const o = r.owner || 'Unknown'
-    if (!ownerArchived[o]) ownerArchived[o] = { total: 0, pending: 0, sold: 0 }
-    ownerArchived[o].total++
-    if (r.transfer_type === 'sold') ownerArchived[o].sold++
-    else ownerArchived[o].pending++
-  })
+  // Per-owner breakdown across ALL sections (breeding, general, archived)
+  const ownerAll = {}
+  function bumpOwner(owner, key) {
+    const o = owner || 'Unknown'
+    if (!ownerAll[o]) ownerAll[o] = { breeding: 0, general: 0, pending: 0, sold: 0 }
+    ownerAll[o][key]++
+  }
+  breeding.forEach(r => bumpOwner(r.owner, 'breeding'))
+  general.forEach(r => bumpOwner(r.owner, 'general'))
+  archived.forEach(r => bumpOwner(r.owner, r.transfer_type === 'sold' ? 'sold' : 'pending'))
 
   function SectionHeader({ title, count, open, onToggle }) {
     return (
@@ -259,8 +258,12 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
         {/* Stat cards */}
         <div className="row" style={{ gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Total transferred</div>
-            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text)' }}>{totalTransferred}</div>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Breeding animals</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text)' }}>{totalBreeding}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>General cattle</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text)' }}>{totalGeneral}</div>
           </div>
           <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
             <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Pending sale</div>
@@ -270,40 +273,48 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Sold / invoiced</div>
             <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-success-text, #15803d)' }}>{totalSold}</div>
           </div>
+          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Total head</div>
+            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text)' }}>{totalAll}</div>
+          </div>
         </div>
 
-        {/* Per-owner table */}
-        {Object.keys(ownerArchived).length > 0 && (
+        {/* Per-owner table across all sections */}
+        {Object.keys(ownerAll).length > 0 && (
           <table style={{ width: '100%', fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
                 <th style={{ textAlign: 'left', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Owner</th>
-                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Breeding</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>General</th>
                 <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pending Sale</th>
                 <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sold / Invoiced</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', fontWeight: 500, color: 'var(--color-text-muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(ownerArchived).sort((a,b) => a[0].localeCompare(b[0])).map(([owner, d]) => (
+              {Object.entries(ownerAll).sort((a,b) => a[0].localeCompare(b[0])).map(([owner, d]) => (
                 <tr key={owner} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '10px 0' }}>{owner}</td>
-                  <td style={{ textAlign: 'right', padding: '10px 0' }}>{d.total}</td>
+                  <td style={{ textAlign: 'right', padding: '10px 0' }}>{d.breeding > 0 ? d.breeding : '—'}</td>
+                  <td style={{ textAlign: 'right', padding: '10px 0' }}>{d.general > 0 ? d.general : '—'}</td>
                   <td style={{ textAlign: 'right', padding: '10px 0', color: d.pending > 0 ? 'var(--color-warning-text, #92400e)' : 'inherit' }}>{d.pending > 0 ? d.pending : '—'}</td>
                   <td style={{ textAlign: 'right', padding: '10px 0' }}>{d.sold > 0 ? d.sold : '—'}</td>
+                  <td style={{ textAlign: 'right', padding: '10px 0', fontWeight: 500 }}>{d.breeding + d.general + d.pending + d.sold}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        {Object.keys(ownerArchived).length === 0 && !loading && (
-          <p className="muted" style={{ margin: 0 }}>No transferred animals yet.</p>
+        {Object.keys(ownerAll).length === 0 && !loading && (
+          <p className="muted" style={{ margin: 0 }}>No cattle records yet.</p>
         )}
       </div>
 
       {/* ── Search + Sync ── */}
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ear tag or identity number..." style={{ width: '100%', maxWidth: 360 }} />
-        <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('Sync cattle register from calf registrations? This will fill in any missing fields.')) syncExistingData() }}>Sync</button>
+        <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('Sync cattle register from calf registrations? This will overwrite matching fields (sex, DOB, breed, mother/father ID, identity number) wherever the calf record differs.')) syncExistingData() }}>Sync</button>
       </div>
 
       {/* ── Breeding animals ── */}
@@ -428,7 +439,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                         <td style={{ textAlign: 'right' }}>
                           <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                             {!isSold
-                              ? <button className="primary" style={{ fontSize: 12 }} onClick={() => markSold(c.id)}>Mark sold</button>
+                              ? <span className="badge warning" style={{ fontSize: 12 }} title="Becomes 'Sold' automatically when a Kitai sale invoice is created for this animal">Awaiting Kitai invoice</span>
                               : <button style={{ fontSize: 12 }} onClick={() => markUnsold(c.id)}>Revert</button>
                             }
                             <button style={{ fontSize: 12 }} onClick={() => unarchive(c.id)}>Restore</button>
