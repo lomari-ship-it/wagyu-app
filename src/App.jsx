@@ -8,21 +8,26 @@ import Batches from './components/Batches'
 import Reconciliation from './components/Reconciliation'
 import LateRegistrations from './components/LateRegistrations'
 import KitaiTransfers from './components/KitaiTransfers'
+import LevyList from './components/LevyList'
+import NamibianWagyuSociety from './components/NamibianWagyuSociety'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'calves', label: 'Calf registration' },
-  { id: 'cattle', label: 'Cattle register' },
-  { id: 'batches', label: 'Batches & invoices' },
-  { id: 'reconciliation', label: 'Reconciliation' },
-  { id: 'late', label: 'Late registrations' },
-  { id: 'kitai', label: 'Kitai transfers' },
+  { id: 'calves', label: 'Calf Registrations' },
+  { id: 'cattle', label: 'Cattle Register' },
+  { id: 'batches', label: 'Birth Notifications and DNA Testing' },
+  { id: 'late', label: 'Late Registrations' },
+  { id: 'kitai', label: 'Kitai' },
+  { id: 'reconciliation', label: "Recon's and Reports" },
+  { id: 'levy', label: 'Levy List' },
+  { id: 'nws', label: 'Namibian Wagyu Society' },
 ]
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('dashboard')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -68,12 +73,14 @@ export default function App() {
 
       <main>
         {tab === 'dashboard' && <Dashboard />}
-        {tab === 'calves' && <CalfRegistration />}
-        {tab === 'cattle' && <CattleRegister />}
-        {tab === 'batches' && <Batches />}
-        {tab === 'reconciliation' && <Reconciliation />}
-        {tab === 'late' && <LateRegistrations />}
-        {tab === 'kitai' && <KitaiTransfers />}
+        {tab === 'calves' && <CalfRegistration search={search} onSearchChange={setSearch} />}
+        {tab === 'cattle' && <CattleRegister search={search} onSearchChange={setSearch} />}
+        {tab === 'batches' && <Batches search={search} onSearchChange={setSearch} />}
+        {tab === 'late' && <LateRegistrations search={search} onSearchChange={setSearch} />}
+        {tab === 'kitai' && <KitaiTransfers search={search} onSearchChange={setSearch} />}
+        {tab === 'reconciliation' && <Reconciliation search={search} onSearchChange={setSearch} />}
+        {tab === 'levy' && <LevyList search={search} onSearchChange={setSearch} />}
+        {tab === 'nws' && <NamibianWagyuSociety />}
       </main>
     </div>
   )
