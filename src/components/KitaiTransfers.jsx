@@ -29,9 +29,11 @@ function CollapsibleCard({ title, count, countLabel, children, defaultOpen = fal
   )
 }
 
-export default function KitaiTransfers() {
+export default function KitaiTransfers({ search: parentSearch = '', onSearchChange }) {
   const [tab, setTab] = useState('cattle')
-  const [globalSearch, setGlobalSearch] = useState('')
+  const [localSearch, setLocalSearch] = useState(parentSearch)
+  const globalSearch = onSearchChange ? parentSearch : localSearch
+  const setGlobalSearch = onSearchChange || setLocalSearch
   const [transfers, setTransfers] = useState([])
   const [allKitaiCattle, setAllKitaiCattle] = useState([])
   const [calves, setCalves] = useState([])
@@ -123,7 +125,7 @@ export default function KitaiTransfers() {
           type="text"
           value={globalSearch}
           onChange={e => setGlobalSearch(e.target.value)}
-          placeholder="Search by ear tag..."
+          placeholder="Search by ear tag or identity number..."
           style={{ width: '100%', maxWidth: 320 }}
         />
       </div>
@@ -137,7 +139,7 @@ export default function KitaiTransfers() {
 
 // ─── CATTLE TRANSFERS TAB ───────────────────────────────────────────────────
 function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedTransferIds, search, onReload }) {
-  const filteredCattle = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
+  const filteredCattle = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
   const [selected, setSelected] = useState(new Set())
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
   const [invoiceDetails, setInvoiceDetails] = useState({ date: '', number: '', amount: '', notes: '' })
@@ -147,7 +149,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
   const [importMsg, setImportMsg] = useState('')
   const [notFound, setNotFound] = useState([])
   const [importPreview, setImportPreview] = useState(null)  // { toInsert, alreadyTransferred, notFound }
-  const allCattleToShow = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
+  const allCattleToShow = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
   const soldIds = new Set(transfers.filter(t => t.sold_flag).map(t => t.animal_id))
   const invoicedCattleIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []).map(id => {
     const t = transfers.find(t => t.id === id)
@@ -456,7 +458,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 
 // ─── DNA COST RECOVERY TAB ──────────────────────────────────────────────────
 function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, search, onReload }) {
-  const filteredTransfers = search ? transfers.filter(t => (t.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : transfers
+  const filteredTransfers = search ? transfers.filter(t => (t.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (t.identity_number||"").toLowerCase().includes(search.toLowerCase())) : transfers
   // Auto-expand all sections when searching
   useEffect(() => { if (search) { setAllOpen(true); setPendingOpen(true); setInvoicedOpen(true) } }, [search])
   const [eligibleOpen, setEligibleOpen] = useState(true)
@@ -854,8 +856,8 @@ function InvoiceFileUpload({ inv, onReload }) {
 
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
 function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
-  const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
-  const filteredDnaInvoiced = search ? transfers.filter(t => t.invoice_status === 'invoiced' && (t.ear_tag||"").toLowerCase().includes(search.toLowerCase())) : transfers.filter(t => t.invoice_status === 'invoiced')
+  const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
+  const filteredDnaInvoiced = search ? transfers.filter(t => t.invoice_status === 'invoiced' && ((t.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (t.identity_number||"").toLowerCase().includes(search.toLowerCase()))) : transfers.filter(t => t.invoice_status === 'invoiced')
 
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [newInvoice, setNewInvoice] = useState({ date: '', number: '', notes: '' })
