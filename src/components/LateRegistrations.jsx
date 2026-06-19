@@ -26,7 +26,7 @@ function fmtCurrency(val) {
   return 'N$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export default function LateRegistrations() {
+export default function LateRegistrations({ search: parentSearch = '', onSearchChange }) {
   const [batches, setBatches] = useState([])
   const [calves, setCalves] = useState([])
   const [invoices, setInvoices] = useState([])
@@ -36,6 +36,10 @@ export default function LateRegistrations() {
   const [createMsg, setCreateMsg] = useState('')
   const [newInvoice, setNewInvoice] = useState({ date: '', number: '', rate: '' })
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [invoicesOpen, setInvoicesOpen] = useState(false)
+  const [localSearch, setLocalSearch] = useState(parentSearch)
+  const search = onSearchChange ? parentSearch : localSearch
+  const setSearch = onSearchChange || setLocalSearch
 
   useEffect(() => { loadAll() }, [])
 
@@ -74,7 +78,11 @@ export default function LateRegistrations() {
 
   lateCalves.sort((a, b) => b.days - a.days)
 
-  const uninvoiced = lateCalves.filter(c => !c.alreadyInvoiced)
+  const uninvoicedAll = lateCalves.filter(c => !c.alreadyInvoiced)
+  const uninvoiced = !search ? uninvoicedAll : uninvoicedAll.filter(c =>
+    (c.ear_tag || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.identity_number || '').toLowerCase().includes(search.toLowerCase())
+  )
   const byOwner = {}
   lateCalves.forEach(c => {
     if (!byOwner[c.owner]) byOwner[c.owner] = { late: 0, veryLate: 0 }
@@ -191,6 +199,14 @@ export default function LateRegistrations() {
         )}
 
         {lateCalves.length === 0 && <p className="muted">No late registrations found across submitted batches.</p>}
+
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by ear tag or identity number..."
+          style={{ width: '100%', maxWidth: 360, marginTop: 12 }}
+        />
       </div>
 
       {/* Create invoice */}
@@ -248,11 +264,24 @@ export default function LateRegistrations() {
       )}
 
       {/* Invoice list */}
-      <div>
-        <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Late registration invoices</h2>
-        {invoices.length === 0 ? <p className="muted">No late registration invoices yet.</p> : (
-          <div className="stack">
-            {invoices.map(inv => <InvoiceCard key={inv.id} invoice={inv} onUpdate={updateInvoice} onDelete={deleteInvoice} onReload={loadAll} />)}
+      <div className="card" style={{ padding: 0 }}>
+        <div
+          onClick={() => setInvoicesOpen(v => !v)}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
+        >
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Late registration invoices</h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className="muted">{invoices.length} invoice{invoices.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: invoicesOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+          </div>
+        </div>
+        {invoicesOpen && (
+          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+            {invoices.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No late registration invoices yet.</p> : (
+              <div className="stack" style={{ marginTop: 12 }}>
+                {invoices.map(inv => <InvoiceCard key={inv.id} invoice={inv} onUpdate={updateInvoice} onDelete={deleteInvoice} onReload={loadAll} />)}
+              </div>
+            )}
           </div>
         )}
       </div>
