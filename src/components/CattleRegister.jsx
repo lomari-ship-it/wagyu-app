@@ -14,7 +14,7 @@ function sortRecords(records) {
   })
 }
 
-export default function CattleRegister() {
+export default function CattleRegister({ search: parentSearch = '', onSearchChange }) {
   const [breeding, setBreeding] = useState([])
   const [general,  setGeneral]  = useState([])
   const [archived, setArchived] = useState([])
@@ -27,7 +27,9 @@ export default function CattleRegister() {
   const [transferringId, setTransferringId] = useState(null)
   const [transferForm, setTransferForm] = useState(emptyTransfer)
   const [transferSaving, setTransferSaving] = useState(false)
-  const [search, setSearch] = useState('')
+  const [localSearch, setLocalSearch] = useState(parentSearch)
+  const search = onSearchChange ? parentSearch : localSearch
+  const setSearch = onSearchChange || setLocalSearch
   const [breedingOpen, setBreedingOpen] = useState(false)
   const [generalOpen,  setGeneralOpen]  = useState(false)
   const [archivedOpen, setArchivedOpen] = useState(false)
