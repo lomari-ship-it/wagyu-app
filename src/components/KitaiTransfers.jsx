@@ -39,18 +39,20 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
   const [calves, setCalves] = useState([])
   const [batches, setBatches] = useState([])
   const [saleInvoices, setSaleInvoices] = useState([])
+  const [dnaInvoices, setDnaInvoices] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { loadAll() }, [])
 
   async function loadAll() {
     setLoading(true)
-    const [t, ca, c, b, si] = await Promise.all([
+    const [t, ca, c, b, si, di] = await Promise.all([
       supabase.from('kitai_transfers').select('*').order('created_at', { ascending: false }),
       supabase.from('cattle_register').select('*').eq('archived', true).eq('transfer_type', 'kitai'),
       supabase.from('calves').select('*'),
       supabase.from('batches').select('id, calf_ids, calf_summaries, rate_per_test, invoice_test_count, invoice_amount_payable'),
       supabase.from('kitai_sale_invoices').select('*').order('created_at', { ascending: false }),
+      supabase.from('kitai_dna_invoices').select('*').order('created_at', { ascending: false }),
     ])
     const kitaiCattle = ca.data || []
     const existingTransfers = t.data || []
@@ -58,6 +60,7 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
     if (!c.error) setCalves(c.data || [])
     if (!b.error) setBatches(b.data || [])
     if (!si.error) setSaleInvoices(si.data || [])
+    if (!di.error) setDnaInvoices(di.data || [])
 
     // Auto-add any kitai cattle not yet in transfers
     const transferredAnimalIds = new Set(existingTransfers.map(tr => tr.animal_id))
@@ -131,8 +134,8 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
       </div>
 
       {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
-      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
-      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} search={globalSearch} onReload={loadAll} />}
+      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} dnaInvoices={dnaInvoices} search={globalSearch} onReload={loadAll} />}
+      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} dnaInvoices={dnaInvoices} getDnaCostByEarTag={getDnaCostByEarTag} search={globalSearch} onReload={loadAll} />}
     </div>
   )
 }
@@ -457,7 +460,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 }
 
 // ─── DNA COST RECOVERY TAB ──────────────────────────────────────────────────
-function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, search, onReload }) {
+function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, dnaInvoices, search, onReload }) {
   const filteredTransfers = search ? transfers.filter(t => (t.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (t.identity_number||"").toLowerCase().includes(search.toLowerCase())) : transfers
   // Auto-expand all sections when searching
   useEffect(() => { if (search) { setAllOpen(true); setPendingOpen(true); setInvoicedOpen(true) } }, [search])
@@ -680,6 +683,9 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
 
           {pendingOpen && (
             <>
+            <p className="muted" style={{ fontSize: 12, padding: '0 16px', marginTop: 12 }}>
+              Cattle transfers are invoiced automatically when a cattle sale invoice is created (see the Invoices tab). Use this manual form only for DNA cost recovery on animals not covered by a cattle sale invoice.
+            </p>
             {/* Invoice form */}
             {showInvoiceForm && (
               <div style={{ marginTop: 12, padding: 12, background: 'var(--color-accent-light)', borderRadius: 8 }}>
@@ -854,10 +860,49 @@ function InvoiceFileUpload({ inv, onReload }) {
   )
 }
 
+function DnaInvoiceFileUpload({ inv, onReload }) {
+  const fileRef = useRef()
+  const [uploading, setUploading] = useState(false)
+
+  async function handleUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    const path = 'kitai-dna/' + inv.id + '/' + file.name
+    const { error } = await supabase.storage.from('batch-documents').upload(path, file, { upsert: true })
+    if (error) { alert('Upload failed: ' + error.message); setUploading(false); return }
+    const { data: urlData } = supabase.storage.from('batch-documents').getPublicUrl(path)
+    await supabase.from('kitai_dna_invoices').update({ invoice_file_name: file.name, invoice_file_url: urlData.publicUrl }).eq('id', inv.id)
+    setUploading(false); onReload()
+  }
+
+  async function removeFile() {
+    await supabase.from('kitai_dna_invoices').update({ invoice_file_name: null, invoice_file_url: null }).eq('id', inv.id)
+    onReload()
+  }
+
+  return (
+    <div>
+      <label style={{ marginBottom: 4 }}>Invoice document</label>
+      {inv.invoice_file_url ? (
+        <div className="row">
+          <a href={inv.invoice_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {inv.invoice_file_name}</a>
+          <button className="danger-text" style={{ fontSize: 12 }} onClick={removeFile}>Remove</button>
+        </div>
+      ) : (
+        <div className="row">
+          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleUpload} />
+          <button disabled={uploading} onClick={() => fileRef.current.click()} style={{ fontSize: 13 }}>{uploading ? 'Uploading...' : 'Upload invoice'}</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
-function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
+function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag, search, onReload }) {
   const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
-  const filteredDnaInvoiced = search ? transfers.filter(t => t.invoice_status === 'invoiced' && ((t.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (t.identity_number||"").toLowerCase().includes(search.toLowerCase()))) : transfers.filter(t => t.invoice_status === 'invoiced')
+  const filteredDnaInvoices = search ? dnaInvoices.filter(di => (di.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : dnaInvoices
 
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [newInvoice, setNewInvoice] = useState({ date: '', number: '', notes: '' })
@@ -869,6 +914,7 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
   const [createMsg, setCreateMsg] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [expandedInvoice, setExpandedInvoice] = useState(null)
+  const [expandedDnaInvoice, setExpandedDnaInvoice] = useState(null)
   const [dnaOpen, setDnaOpen] = useState(true)
   const [salesOpen, setSalesOpen] = useState(true)
   const [showCsvImport, setShowCsvImport] = useState(false)
@@ -879,19 +925,11 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
   const invoicedIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []))
   const unsold = transfers.filter(t => !t.sold_flag && !invoicedIds.has(t.id))
 
-  // DNA cost recovery grouped by invoice number
-  const dnaByInvoice = {}
-  filteredDnaInvoiced.forEach(t => {
-    const key = t.invoice_number || 'No invoice number'
-    if (!dnaByInvoice[key]) dnaByInvoice[key] = { number: t.invoice_number, date: t.invoice_date, animals: [], total: 0 }
-    dnaByInvoice[key].animals.push(t)
-  })
-
   // Summary totals
   const totalSaleInvoices = filteredInvoices.length
-  const totalDnaGroups = Object.keys(dnaByInvoice).length
+  const totalDnaInvoices = filteredDnaInvoices.length
   const totalSaleAnimals = filteredInvoices.reduce((s, i) => s + (i.animal_summaries||[]).length, 0)
-  const totalDnaAnimals = filteredDnaInvoiced.length
+  const totalDnaAnimals = filteredDnaInvoices.reduce((s, i) => s + (i.animal_count || 0), 0)
 
   function toggleSelect(id) {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
@@ -957,6 +995,28 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
       await supabase.from('cattle_register').update({ transfer_type: 'sold' }).in('id', cattleIds)
     }
 
+    // Auto-generate the linked DNA cost recovery invoice (matched by ear tag / identity number,
+    // cost pulled from the DNA cost recovery sub-tab's batch lookup). Status starts 'pending';
+    // invoice number is left blank for the user to fill in later.
+    const dnaSummaries = selected.map(t => {
+      const cost = parseFloat(t.dna_cost_recoverable) || getDnaCostByEarTag(t.ear_tag) || 0
+      return { id: t.id, earTag: t.ear_tag, identityNumber: t.identity_number, owner: t.owner, animalType: t.animal_type, dnaCost: cost }
+    })
+    const dnaTotal = dnaSummaries.reduce((s, d) => s + d.dnaCost, 0)
+    const { data: dnaInserted, error: dnaError } = await supabase.from('kitai_dna_invoices').insert({
+      sale_invoice_id: inserted.id,
+      status: 'pending',
+      invoice_date: newInvoice.date || null,
+      animal_count: selected.length,
+      total_amount: dnaTotal,
+      animal_summaries: dnaSummaries,
+    }).select().single()
+    if (!dnaError && dnaInserted) {
+      await Promise.all(selected.map(t => supabase.from('kitai_transfers').update({
+        invoice_status: 'invoiced', dna_invoice_id: dnaInserted.id,
+      }).eq('id', t.id)))
+    }
+
     if (inserted && newInvoiceFile) {
       const path = 'kitai/' + inserted.id + '/' + newInvoiceFile.name
       const { error: upErr } = await supabase.storage.from('batch-documents').upload(path, newInvoiceFile, { upsert: true })
@@ -981,6 +1041,23 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
   async function updateInvoice(id, updates) { await supabase.from('kitai_sale_invoices').update(updates).eq('id', id); onReload() }
   async function deleteInvoice(id) { await supabase.from('kitai_sale_invoices').delete().eq('id', id); onReload() }
 
+  // DNA invoice updates auto-drive status: pending -> payment_outstanding once an invoice
+  // number is entered, then -> paid once a payment date is entered.
+  async function updateDnaInvoice(id, updates) {
+    const inv = dnaInvoices.find(d => d.id === id)
+    const merged = { ...inv, ...updates }
+    if (merged.payment_date) updates.status = 'paid'
+    else if (merged.invoice_number) updates.status = 'payment_outstanding'
+    else updates.status = 'pending'
+    await supabase.from('kitai_dna_invoices').update(updates).eq('id', id)
+    onReload()
+  }
+  async function deleteDnaInvoice(id) {
+    await supabase.from('kitai_transfers').update({ invoice_status: 'pending', dna_invoice_id: null }).eq('dna_invoice_id', id)
+    await supabase.from('kitai_dna_invoices').delete().eq('id', id)
+    onReload()
+  }
+
   return (
     <div className="stack" style={{ gap: 16 }}>
 
@@ -1004,28 +1081,60 @@ function InvoicesTab({ saleInvoices, transfers, search, onReload }) {
         <div onClick={() => setDnaOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>DNA cost recovery</h2>
           <div className="row" style={{ gap: 12 }}>
-            <span className="muted">{totalDnaGroups} invoice{totalDnaGroups !== 1 ? 's' : ''} · {totalDnaAnimals} animals</span>
+            <span className="muted">{totalDnaInvoices} invoice{totalDnaInvoices !== 1 ? 's' : ''} · {totalDnaAnimals} animals</span>
             <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: dnaOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
           </div>
         </div>
         {dnaOpen && (
-          totalDnaGroups === 0 ? <p className="muted" style={{ padding: '0 16px 12px' }}>No DNA invoices yet. Mark transfers as invoiced in the DNA cost recovery tab.</p> : (
-            <div style={{ borderTop: '1px solid var(--color-border)' }}>
-              {Object.entries(dnaByInvoice).map(([key, group]) => (
-                <div key={key} style={{ borderBottom: '1px solid var(--color-border)', padding: '10px 16px' }}>
-                  <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                    <strong>{group.number || 'No invoice number'}</strong>
-                    <span className="muted" style={{ fontSize: 12 }}>{group.animals.length} animals · {formatDate(group.date)}</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '2px 12px' }}>
-                    {group.animals.map((t, i) => (
-                      <div key={t.id} className="muted" style={{ fontSize: 12 }}>
-                        {i + 1}. {t.ear_tag} {t.identity_number ? '// ' + t.identity_number : ''} — {t.owner}
+          totalDnaInvoices === 0 ? <p className="muted" style={{ padding: '0 16px 12px' }}>No DNA invoices yet. These auto-generate when a cattle sale invoice is created.</p> : (
+            <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+              <div className="stack" style={{ marginTop: 12, gap: 8 }}>
+                {filteredDnaInvoices.map(di => {
+                  const summaries = di.animal_summaries || []
+                  const isExpanded = expandedDnaInvoice === di.id
+                  const statusLabel = di.status === 'paid' ? 'Paid' : di.status === 'payment_outstanding' ? 'Payment outstanding' : 'Pending'
+                  const statusClass = di.status === 'paid' ? 'success' : di.status === 'payment_outstanding' ? 'warning' : ''
+                  return (
+                    <div key={di.id} className="card" style={{ padding: 0 }}>
+                      <div onClick={() => setExpandedDnaInvoice(isExpanded ? null : di.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, marginBottom: 4 }}>{di.invoice_number || 'No invoice number yet'} · {di.animal_count} animals</div>
+                          <div className="row" style={{ gap: 6 }}>
+                            <span className={`badge ${statusClass}`}>{statusLabel}</span>
+                            {di.invoice_date && <span className="muted" style={{ fontSize: 12 }}>{formatDate(di.invoice_date)}</span>}
+                            <span className="muted" style={{ fontSize: 12 }}>{fmtCurrency(di.total_amount)}</span>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                      {isExpanded && (
+                        <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '2px 12px', margin: '12px 0' }}>
+                            {summaries.map((s, i) => (
+                              <div key={s.id || i} className="muted" style={{ fontSize: 12 }}>
+                                {i + 1}. {s.earTag} {s.identityNumber ? '// ' + s.identityNumber : ''} — {s.owner} {s.dnaCost ? `(${fmtCurrency(s.dnaCost)})` : ''}
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+                            <div className="row" style={{ flexWrap: 'wrap' }}>
+                              <div><label>Invoice date</label><input type="date" defaultValue={di.invoice_date || ''} onBlur={e => updateDnaInvoice(di.id, { invoice_date: e.target.value || null })} /></div>
+                              <div><label>Invoice number</label><input style={{ width: 140 }} defaultValue={di.invoice_number || ''} onBlur={e => updateDnaInvoice(di.id, { invoice_number: e.target.value || null })} placeholder="e.g. DNA-001" /></div>
+                              <div><label>Payment date</label><input type="date" defaultValue={di.payment_date || ''} onBlur={e => updateDnaInvoice(di.id, { payment_date: e.target.value || null })} /></div>
+                            </div>
+                          </div>
+                          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+                            <DnaInvoiceFileUpload inv={di} onReload={onReload} />
+                          </div>
+                          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+                            <button className="danger-text" onClick={() => deleteDnaInvoice(di.id)}>Delete invoice</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )
         )}
