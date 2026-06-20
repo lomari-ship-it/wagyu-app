@@ -50,7 +50,7 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
       supabase.from('kitai_transfers').select('*').order('created_at', { ascending: false }),
       supabase.from('cattle_register').select('*').eq('archived', true).eq('transfer_type', 'kitai'),
       supabase.from('calves').select('*'),
-      supabase.from('batches').select('id, calf_ids, calf_summaries, rate_per_test, invoice_test_count, invoice_amount_payable'),
+      supabase.from('batches').select('id, calf_ids, calf_summaries, rate_per_test, invoice_test_count, invoice_amount_payable, invoice_number'),
       supabase.from('kitai_sale_invoices').select('*').order('created_at', { ascending: false }),
       supabase.from('kitai_dna_invoices').select('*').order('created_at', { ascending: false }),
     ])
