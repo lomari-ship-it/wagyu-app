@@ -109,6 +109,17 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
     return null
   }
 
+  // NSBA / batch DNA-test invoice number for an animal, matched by ear tag.
+  function getInvoiceNumberByEarTag(earTag) {
+    for (const batch of batches) {
+      const summaries = batch.calf_summaries || []
+      if (summaries.some(s => s.earTag === earTag)) {
+        return batch.invoice_number || null
+      }
+    }
+    return null
+  }
+
   if (loading) return <p className="muted">Loading...</p>
 
   const invoicedTransferIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []))
@@ -135,7 +146,7 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
 
       {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
       {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} dnaInvoices={dnaInvoices} search={globalSearch} onReload={loadAll} />}
-      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} dnaInvoices={dnaInvoices} getDnaCostByEarTag={getDnaCostByEarTag} search={globalSearch} onReload={loadAll} />}
+      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} dnaInvoices={dnaInvoices} getDnaCostByEarTag={getDnaCostByEarTag} getInvoiceNumberByEarTag={getInvoiceNumberByEarTag} search={globalSearch} onReload={loadAll} />}
     </div>
   )
 }
@@ -900,7 +911,7 @@ function DnaInvoiceFileUpload({ inv, onReload }) {
 }
 
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
-function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag, search, onReload }) {
+function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag, getInvoiceNumberByEarTag, search, onReload }) {
   const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
   const filteredDnaInvoices = search ? dnaInvoices.filter(di => (di.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : dnaInvoices
 
@@ -1112,7 +1123,7 @@ function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag,
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '2px 12px', margin: '12px 0' }}>
                             {summaries.map((s, i) => (
                               <div key={s.id || i} className="muted" style={{ fontSize: 12 }}>
-                                {i + 1}. {s.earTag} {s.identityNumber ? '// ' + s.identityNumber : ''} — {s.owner} {s.dnaCost ? `(${fmtCurrency(s.dnaCost)})` : ''}
+                                {i + 1}. {s.earTag} {s.identityNumber ? '// ' + s.identityNumber : ''} — {getInvoiceNumberByEarTag(s.earTag) || '—'} {s.dnaCost ? `(${fmtCurrency(s.dnaCost)})` : ''}
                               </div>
                             ))}
                           </div>
