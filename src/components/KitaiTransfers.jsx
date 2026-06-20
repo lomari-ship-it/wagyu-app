@@ -1066,7 +1066,7 @@ function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag,
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Summary</h2>
         <div className="muted" style={{ fontSize: 11, fontWeight: 500, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DNA cost recovery</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaGroups}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaInvoices}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
         </div>
         <div className="muted" style={{ fontSize: 11, fontWeight: 500, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cattle sales</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
