@@ -1,0 +1,26 @@
+-- DNA cost recovery invoice automation
+-- One DNA recovery invoice auto-generates per Kitai cattle sale invoice.
+
+create table if not exists kitai_dna_invoices (
+  id uuid primary key default gen_random_uuid(),
+  sale_invoice_id uuid references kitai_sale_invoices(id) on delete cascade,
+  status text default 'pending' check (status in ('pending', 'payment_outstanding', 'paid')),
+  invoice_date date,
+  invoice_number text,
+  payment_date date,
+  invoice_file_name text,
+  invoice_file_url text,
+  animal_count integer default 0,
+  total_amount numeric default 0,
+  animal_summaries jsonb default '[]',
+  created_at timestamptz default now()
+);
+alter table kitai_dna_invoices enable row level security;
+create policy "Allow authenticated full access" on kitai_dna_invoices
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+-- Link each transfer to the DNA recovery invoice that covers it
+alter table kitai_transfers add column if not exists dna_invoice_id uuid references kitai_dna_invoices(id) on delete set null;
+
+create index if not exists idx_kitai_dna_invoices_sale on kitai_dna_invoices(sale_invoice_id);
+create index if not exists idx_kitai_transfers_dna_invoice on kitai_transfers(dna_invoice_id);
