@@ -56,6 +56,130 @@ export default function Batches({ search: parentSearch = '', onSearchChange }) {
     setSelectedCalfIds(allSelected ? new Set() : new Set(filteredCalves.map((c) => c.id)))
   }
 
+  // --- Birth Notification PDF auto-parse ---
+  async function ensurePdfJs() {
+    if (window.pdfjsLib) return window.pdfjsLib
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+      s.onload = resolve
+      s.onerror = () => reject(new Error('Could not load PDF reader'))
+      document.head.appendChild(s)
+      setTimeout(() => reject(new Error('PDF reader load timed out')), 12000)
+    })
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+    }
+    return window.pdfjsLib
+  }
+
+  async function extractPdfText(file) {
+    const pdfjs = await ensurePdfJs()
+    const buf = await file.arrayBuffer()
+    const pdf = await pdfjs.getDocument({ data: buf }).promise
+    let text = ''
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p)
+      const content = await page.getTextContent()
+      text += ' ' + content.items.map(it => it.str).join(' ')
+    }
+    return text
+  }
+
+  // Parse one Birth Notification's text into { ref, animals: [{ident, born, earTag}] }
+  function parseBirthNotification(text) {
+    const ref = (text.match(/\b(\d{6}-\d{3})\b/) || [])[1] || null
+    const idents = [...text.matchAll(/(\d{2}-\d{3,5}[A-Z]{2,4})/g)]
+    const animals = []
+    for (let i = 0; i < idents.length; i++) {
+      const start = idents[i].index
+      const end = (i + 1 < idents.length) ? idents[i + 1].index : text.length
+      const chunk = text.slice(start, end)
+      const ident = idents[i][1]
+      const born = (chunk.match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1] || null
+      const tags = [...chunk.matchAll(/\b(\d{8})\b/g)]
+      const earTag = tags.length ? tags[tags.length - 1][1] : null
+      if (earTag) animals.push({ ident, born, earTag })
+    }
+    return { ref, animals }
+  }
+
+  async function createBatchFromPdfs(fileList) {
+    const files = Array.from(fileList || [])
+    if (files.length === 0) return
+    setCreating(true); setStatusMsg('Reading Birth Notification(s)...')
+    try {
+      let allAnimals = []
+      let refs = []
+      for (const file of files) {
+        const text = await extractPdfText(file)
+        const parsed = parseBirthNotification(text)
+        if (parsed.ref) refs.push(parsed.ref)
+        allAnimals = allAnimals.concat(parsed.animals)
+      }
+      // Deduplicate animals by ident
+      const seen = new Set()
+      allAnimals = allAnimals.filter(a => { if (seen.has(a.ident)) return false; seen.add(a.ident); return true })
+
+      if (allAnimals.length === 0) {
+        setStatusMsg('No animals could be read from the PDF. Please check the document.')
+        setCreating(false); return
+      }
+
+      // Match against the calf register by identity number OR ear tag
+      const byIdent = {}, byTag = {}
+      calves.forEach(c => { if (c.identity_number) byIdent[String(c.identity_number).toUpperCase()] = c; if (c.ear_tag) byTag[String(c.ear_tag)] = c })
+      const matched = [], unmatched = []
+      for (const a of allAnimals) {
+        const hit = byIdent[a.ident.toUpperCase()] || byTag[a.earTag]
+        if (hit) matched.push(hit); else unmatched.push(a)
+      }
+
+      if (matched.length === 0) {
+        setStatusMsg(`None of the ${allAnimals.length} animals matched your calf register. Batch not created.`)
+        setCreating(false); return
+      }
+
+      // Owner: most common owner among matched animals
+      const ownerCounts = {}
+      matched.forEach(c => { const o = c.owner || ''; ownerCounts[o] = (ownerCounts[o] || 0) + 1 })
+      const owners = Object.keys(ownerCounts).filter(Boolean)
+      const owner = owners.sort((a, b) => ownerCounts[b] - ownerCounts[a])[0] || null
+      const mixedOwner = owners.length > 1
+
+      setStatusMsg('Creating batch...')
+      const { data: newBatch, error } = await supabase.from('batches').insert({
+        owner,
+        calf_ids: matched.map(c => c.id),
+        calf_summaries: matched.map(c => ({ id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number, birthDate: c.birth_date })),
+        birth_notification_ref: refs[0] || null,
+      }).select().single()
+      if (error) { setStatusMsg('Failed: ' + error.message); setCreating(false); return }
+
+      // Upload each PDF to storage and record in birth_notification_files
+      const bnFiles = []
+      for (const file of files) {
+        const path = `${newBatch.id}/birth-notifications/${file.name}`
+        const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
+          bnFiles.push({ name: file.name, url: urlData.publicUrl, ref: refs[0] || null, uploaded_at: new Date().toISOString() })
+        }
+      }
+      await supabase.from('batches').update({ birth_notification_files: bnFiles }).eq('id', newBatch.id)
+
+      let summary = `Batch created with ${matched.length} animal${matched.length !== 1 ? 's' : ''}.`
+      if (unmatched.length > 0) summary += ` ${unmatched.length} not found in register: ${unmatched.slice(0, 8).map(u => u.ident).join(', ')}${unmatched.length > 8 ? '…' : ''}`
+      if (mixedOwner) summary += ` Note: animals span multiple owners (${owners.join(', ')}); set to ${owner}.`
+      setStatusMsg(summary)
+      loadAll()
+      setTimeout(() => setStatusMsg(''), 12000)
+    } catch (e) {
+      setStatusMsg('Error: ' + (e.message || String(e)))
+    }
+    setCreating(false)
+  }
+
   async function createBatch() {
     if (selectedCalfIds.size === 0) return
     setCreating(true); setStatusMsg('Creating batch...')
@@ -175,6 +299,29 @@ export default function Batches({ search: parentSearch = '', onSearchChange }) {
         {unbatchedOpen && (
           <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
             <div style={{ marginTop: 12 }} />
+            <div style={{ background: 'var(--color-accent-light)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+              <div style={{ fontWeight: 500, marginBottom: 4 }}>Upload Birth Notification PDF(s)</div>
+              <p className="muted" style={{ fontSize: 12, margin: '0 0 10px' }}>
+                Upload one or more NSBA Birth Notification PDFs. A batch is created automatically: animals are matched to your register by ear tag or identity number, the owner is filled in, and any animals not found are flagged below.
+              </p>
+              <input
+                id="bn-pdf-input"
+                type="file"
+                accept=".pdf"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => { createBatchFromPdfs(e.target.files); e.target.value = '' }}
+              />
+              <button
+                className="primary"
+                disabled={creating}
+                onClick={() => document.getElementById('bn-pdf-input').click()}
+              >
+                {creating ? 'Working...' : 'Upload Birth Notification PDF(s)'}
+              </button>
+              {statusMsg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{statusMsg}</div>}
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Or select calves manually:</div>
             {filteredCalves.length === 0 && !calfSearch && <p className="muted">No active calves available (all already batched or none registered).</p>}
             {filteredCalves.length === 0 && calfSearch && <p className="muted">No calves match "{calfSearch}".</p>}
             {(filteredCalves.length > 0 || selectedCalfIds.size > 0) && (
@@ -238,6 +385,60 @@ export default function Batches({ search: parentSearch = '', onSearchChange }) {
             )}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function BirthNotificationDocs({ batch, onReload }) {
+  const inputRef = useRef()
+  const [uploading, setUploading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const files = Array.isArray(batch.birth_notification_files) ? batch.birth_notification_files : []
+
+  async function handleUpload(e) {
+    const picked = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (picked.length === 0) return
+    setUploading(true); setMsg('Uploading...')
+    const added = []
+    for (const file of picked) {
+      const path = `${batch.id}/birth-notifications/${file.name}`
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
+      if (upErr) { setMsg('Upload failed: ' + upErr.message); setUploading(false); return }
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
+      added.push({ name: file.name, url: urlData.publicUrl, uploaded_at: new Date().toISOString() })
+    }
+    const next = files.concat(added)
+    await supabase.from('batches').update({ birth_notification_files: next }).eq('id', batch.id)
+    setMsg(''); setUploading(false); onReload()
+  }
+
+  async function handleRemove(idx) {
+    const next = files.filter((_, i) => i !== idx)
+    await supabase.from('batches').update({ birth_notification_files: next }).eq('id', batch.id)
+    onReload()
+  }
+
+  return (
+    <div>
+      <label>Birth Notification documents</label>
+      {files.length > 0 && (
+        <div className="stack" style={{ gap: 4, marginBottom: 6 }}>
+          {files.map((f, i) => (
+            <div key={i} className="row" style={{ gap: 6 }}>
+              <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>📄 {f.name}</a>
+              <button className="danger-text" style={{ fontSize: 12 }} onClick={() => handleRemove(i)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="row" style={{ gap: 6 }}>
+        <input ref={inputRef} type="file" accept=".pdf" multiple style={{ display: 'none' }} onChange={handleUpload} />
+        <button disabled={uploading} onClick={() => inputRef.current.click()} style={{ fontSize: 13 }}>
+          {uploading ? 'Uploading...' : 'Add Birth Notification PDF'}
+        </button>
+        {msg && <span className="muted" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
     </div>
   )
@@ -620,6 +821,7 @@ function BatchCard({ batch, calves, allCalves, batchedCalfIds, onUpdate, onDelet
                 batchId={batch.id}
                 onReload={onReload}
               />
+              <BirthNotificationDocs batch={batch} onReload={onReload} />
             </div>
           </div>
 
