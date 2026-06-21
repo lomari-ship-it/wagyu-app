@@ -124,6 +124,18 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
 
   const invoicedTransferIds = new Set(saleInvoices.flatMap(i => i.animal_ids || []))
 
+  const searchBar = (
+    <div style={{ marginBottom: 16 }}>
+      <input
+        type="text"
+        value={globalSearch}
+        onChange={e => setGlobalSearch(e.target.value)}
+        placeholder="Search by ear tag or identity number..."
+        style={{ width: '100%', maxWidth: 320 }}
+      />
+    </div>
+  )
+
   return (
     <div className="stack" style={{ gap: 24 }}>
       <div className="row" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: 12 }}>
@@ -134,25 +146,15 @@ export default function KitaiTransfers({ search: parentSearch = '', onSearchChan
         ))}
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <input
-          type="text"
-          value={globalSearch}
-          onChange={e => setGlobalSearch(e.target.value)}
-          placeholder="Search by ear tag or identity number..."
-          style={{ width: '100%', maxWidth: 320 }}
-        />
-      </div>
-
-      {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} search={globalSearch} onReload={loadAll} />}
-      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} dnaInvoices={dnaInvoices} search={globalSearch} onReload={loadAll} />}
-      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} dnaInvoices={dnaInvoices} getDnaCostByEarTag={getDnaCostByEarTag} getInvoiceNumberByEarTag={getInvoiceNumberByEarTag} search={globalSearch} onReload={loadAll} />}
+      {tab === 'cattle' && <CattleTransfersTab allKitaiCattle={allKitaiCattle} transfers={transfers} saleInvoices={saleInvoices} invoicedTransferIds={invoicedTransferIds} search={globalSearch} searchBar={searchBar} onReload={loadAll} />}
+      {tab === 'dna' && <DnaTab transfers={transfers} batches={batches} calves={calves} getDnaCost={getDnaCost} getDnaCostByEarTag={getDnaCostByEarTag} allKitaiCattle={allKitaiCattle} invoicedTransferIds={invoicedTransferIds} dnaInvoices={dnaInvoices} search={globalSearch} searchBar={searchBar} onReload={loadAll} />}
+      {tab === 'invoices' && <InvoicesTab saleInvoices={saleInvoices} transfers={transfers} dnaInvoices={dnaInvoices} getDnaCostByEarTag={getDnaCostByEarTag} getInvoiceNumberByEarTag={getInvoiceNumberByEarTag} search={globalSearch} searchBar={searchBar} onReload={loadAll} />}
     </div>
   )
 }
 
 // ─── CATTLE TRANSFERS TAB ───────────────────────────────────────────────────
-function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedTransferIds, search, onReload }) {
+function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedTransferIds, search, searchBar, onReload }) {
   const filteredCattle = search ? allKitaiCattle.filter(c => (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())) : allKitaiCattle
   const [selected, setSelected] = useState(new Set())
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
@@ -349,6 +351,8 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
         )}
       </div>
 
+      {searchBar}
+
       {/* CSV Import */}
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: showImport ? 12 : 0 }}>
@@ -471,7 +475,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 }
 
 // ─── DNA COST RECOVERY TAB ──────────────────────────────────────────────────
-function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, dnaInvoices, search, onReload }) {
+function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, allKitaiCattle, invoicedTransferIds, dnaInvoices, search, searchBar, onReload }) {
   const filteredTransfers = search ? transfers.filter(t => (t.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (t.identity_number||"").toLowerCase().includes(search.toLowerCase())) : transfers
   // Auto-expand all sections when searching
   useEffect(() => { if (search) { setAllOpen(true); setPendingOpen(true); setInvoicedOpen(true) } }, [search])
@@ -615,6 +619,8 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
           </div>
         )}
       </div>
+
+      {searchBar}
 
       {/* Not yet tracked */}
       {(eligibleCalves.length > 0 || eligibleCattle.length > 0) && (
@@ -911,7 +917,7 @@ function DnaInvoiceFileUpload({ inv, onReload }) {
 }
 
 // ─── SALE INVOICES TAB ───────────────────────────────────────────────────────
-function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag, getInvoiceNumberByEarTag, search, onReload }) {
+function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag, getInvoiceNumberByEarTag, search, searchBar, onReload }) {
   const filteredInvoices = search ? saleInvoices.filter(inv => (inv.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : saleInvoices
   const filteredDnaInvoices = search ? dnaInvoices.filter(di => (di.animal_summaries||[]).some(s => (s.earTag||"").toLowerCase().includes(search.toLowerCase()) || (s.identityNumber||"").toLowerCase().includes(search.toLowerCase()))) : dnaInvoices
 
@@ -941,6 +947,15 @@ function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag,
   const totalDnaInvoices = filteredDnaInvoices.length
   const totalSaleAnimals = filteredInvoices.reduce((s, i) => s + (i.animal_summaries||[]).length, 0)
   const totalDnaAnimals = filteredDnaInvoices.reduce((s, i) => s + (i.animal_count || 0), 0)
+  // DNA recoverable amounts + status breakdown
+  const dnaTotalAmount = filteredDnaInvoices.reduce((s, i) => s + parseFloat(i.total_amount || 0), 0)
+  const dnaPaid = filteredDnaInvoices.filter(i => i.status === 'paid')
+  const dnaOutstanding = filteredDnaInvoices.filter(i => i.status !== 'paid')
+  const dnaPaidAmount = dnaPaid.reduce((s, i) => s + parseFloat(i.total_amount || 0), 0)
+  const dnaOutstandingAmount = dnaOutstanding.reduce((s, i) => s + parseFloat(i.total_amount || 0), 0)
+  const dnaPendingCount = filteredDnaInvoices.filter(i => i.status === 'pending').length
+  const dnaPaymentOutstandingCount = filteredDnaInvoices.filter(i => i.status === 'payment_outstanding').length
+  const dnaPaidCount = dnaPaid.length
 
   function toggleSelect(id) {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
@@ -1076,8 +1091,16 @@ function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag,
       <div className="card">
         <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Summary</h2>
         <div className="muted" style={{ fontSize: 11, fontWeight: 500, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>DNA cost recovery</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Invoices</div><div style={{ fontSize: 28, fontWeight: 500 }}>{totalDnaInvoices}</div><div className="muted" style={{ fontSize: 11 }}>{totalDnaAnimals} animals</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Total recoverable</div><div style={{ fontSize: 28, fontWeight: 500 }}>{fmtCurrency(dnaTotalAmount)}</div><div className="muted" style={{ fontSize: 11 }}>across all invoices</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Paid</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-success-text)' }}>{fmtCurrency(dnaPaidAmount)}</div><div className="muted" style={{ fontSize: 11 }}>{dnaPaidCount} invoice{dnaPaidCount !== 1 ? 's' : ''}</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Outstanding</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-warning-text)' }}>{fmtCurrency(dnaOutstandingAmount)}</div><div className="muted" style={{ fontSize: 11 }}>{dnaOutstanding.length} invoice{dnaOutstanding.length !== 1 ? 's' : ''}</div></div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Pending</div><div style={{ fontSize: 28, fontWeight: 500 }}>{dnaPendingCount}</div><div className="muted" style={{ fontSize: 11 }}>no invoice no. yet</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Payment outstanding</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-warning-text)' }}>{dnaPaymentOutstandingCount}</div><div className="muted" style={{ fontSize: 11 }}>awaiting payment</div></div>
+          <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Paid</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-success-text)' }}>{dnaPaidCount}</div><div className="muted" style={{ fontSize: 11 }}>fully settled</div></div>
         </div>
         <div className="muted" style={{ fontSize: 11, fontWeight: 500, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cattle sales</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
@@ -1086,6 +1109,8 @@ function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag,
           <div className="card" style={{ textAlign: 'center' }}><div className="muted" style={{ fontSize: 12 }}>Outstanding</div><div style={{ fontSize: 28, fontWeight: 500, color: 'var(--color-warning-text)' }}>{filteredInvoices.filter(i => !i.payment_date).length}</div><div className="muted" style={{ fontSize: 11 }}>{filteredInvoices.filter(i => !i.payment_date).reduce((s, i) => s + (i.animal_summaries||[]).length, 0)} animals</div></div>
         </div>
       </div>
+
+      {searchBar}
 
       {/* DNA Cost Recovery Invoices */}
       <div className="card" style={{ padding: 0 }}>
