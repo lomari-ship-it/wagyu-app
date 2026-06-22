@@ -18,7 +18,7 @@ const TABS = [
   { id: 'batches', label: 'Birth Notifications and DNA Testing' },
   { id: 'late', label: 'Late Registrations' },
   { id: 'kitai', label: 'Kitai' },
-  { id: 'reconciliation', label: "Recon's and Reports" },
+  { id: 'reconciliation', label: 'Reconciliation by Owner' },
   { id: 'levy', label: 'Levy List' },
   { id: 'nws', label: 'Namibian Wagyu Society' },
 ]
