@@ -200,12 +200,15 @@ export default function LateRegistrations({ search: parentSearch = '', onSearchC
 
         {lateCalves.length === 0 && <p className="muted">No late registrations found across submitted batches.</p>}
 
+      </div>
+
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by ear tag or identity number..."
-          style={{ width: '100%', maxWidth: 360, marginTop: 12 }}
+          style={{ flex: 1, minWidth: 240, maxWidth: 360 }}
         />
       </div>
 
