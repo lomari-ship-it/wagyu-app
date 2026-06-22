@@ -68,12 +68,15 @@ export default function Reconciliation({ search: parentSearch = '', onSearchChan
             <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text-muted)' }}>—</div>
           </div>
         </div>
+      </div>
+
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by ear tag or identity number..."
-          style={{ width: '100%', maxWidth: 360 }}
+          style={{ flex: 1, minWidth: 240, maxWidth: 360 }}
         />
       </div>
 
