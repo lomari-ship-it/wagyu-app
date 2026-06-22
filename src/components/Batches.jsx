@@ -276,12 +276,15 @@ export default function Batches({ search: parentSearch = '', onSearchChange }) {
             <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-success-text, #15803d)' }}>{invoicedBatches}</div>
           </div>
         </div>
+      </div>
+
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input
           type="text"
           value={calfSearch}
           onChange={(e) => setCalfSearch(e.target.value)}
           placeholder="Search by ear tag or identity number..."
-          style={{ width: '100%', maxWidth: 360 }}
+          style={{ flex: 1, minWidth: 240, maxWidth: 360 }}
         />
       </div>
 
