@@ -216,7 +216,6 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
           <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <span className="muted">{calves.length} entries</span>
             <div className="row" style={{ gap: 6 }}>
-              <button onClick={syncToRegister} style={{ fontSize: 12 }}>Sync all to cattle register</button>
               <button onClick={() => setShowImport(v => !v)} style={{ fontSize: 12 }}>Import from CSV</button>
             </div>
           </div>
@@ -233,15 +232,6 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
               </div>
             </div>
           )}
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by ear tag or identity number..."
-            style={{ width: '100%', maxWidth: 360 }}
-          />
         </div>
         <form onSubmit={handleSubmit} className="grid-form" style={{ marginBottom: 12 }}>
           <div>
@@ -330,6 +320,16 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
             <span className="muted">{statusMsg}</span>
           </div>
         </form>
+      </div>
+
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by ear tag or identity number..."
+          style={{ flex: 1, minWidth: 240, maxWidth: 360 }}
+        />
       </div>
 
       <div className="card" style={{ padding: 0 }}>
