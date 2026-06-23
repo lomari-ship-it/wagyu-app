@@ -3,7 +3,7 @@ import { supabase, OWNERS, NAMLITS_OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
-const BREEDS = ['Wagyu', 'Angus', 'Simmentaler', 'Brahman', 'Hereford', 'Bonsmara', 'Limousin', 'Charolais', 'Other']
+const BREEDS = ['Wagyu', 'F1', 'F2', 'Angus']
 const COLORS = [
   '1 - Red', '2 - Red and white', '3 - White and red', '4 - Yellow', '5 - Roan',
   '6 - White', '7 - Red with white on underline', '8 - Yellow and white', '9 - Black',
@@ -11,7 +11,6 @@ const COLORS = [
 ]
 
 export default function CalfRegistration({ search, onSearchChange }) {
-  const idYear = new Date().getFullYear()
   const emptyForm = {
     owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
     color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
@@ -30,6 +29,8 @@ export default function CalfRegistration({ search, onSearchChange }) {
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState(null)
   const [importResult, setImportResult] = useState(null)
+
+  const idYear = form.birth_date ? form.birth_date.slice(2, 4) : new Date().getFullYear().toString().slice(2)
 
   useEffect(() => { load() }, [])
 
@@ -176,23 +177,25 @@ export default function CalfRegistration({ search, onSearchChange }) {
 
   function EditCalfCard({ calf }) {
     const f = editForm
-    const idYear = new Date().getFullYear()
+    const idYear = f.birth_date ? f.birth_date.slice(2, 4) : new Date().getFullYear().toString().slice(2)
     function set(field, value) { setEditForm(prev => ({ ...prev, [field]: value })) }
     return (
       <div className="card" style={{ border: '2px solid var(--color-primary)', padding: '16px 20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
-          <div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px 16px' }}>
+          <div style={{ gridColumn: 'span 3' }}>
             <label>Owner</label>
             <select value={f.owner} onChange={(e) => set('owner', e.target.value)}>
               <option value="">Select owner</option>
               {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 3' }}>
             <label>Breed</label>
-            <input value={f.breed} onChange={(e) => set('breed', e.target.value)} />
+            <select value={f.breed} onChange={(e) => set('breed', e.target.value)}>
+              {BREEDS.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 3' }}>
             <label>Color</label>
             <select value={f.color} onChange={(e) => set('color', e.target.value)}>
               <option value="">Select color</option>
@@ -213,15 +216,15 @@ export default function CalfRegistration({ search, onSearchChange }) {
               <option value="15 - Nellore">15 - Nellore</option>
             </select>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 3' }}>
             <label>Birth date</label>
             <input type="date" value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} />
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 2' }}>
             <label>Ear tag</label>
             <input value={f.ear_tag} onChange={(e) => set('ear_tag', e.target.value)} />
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 2' }}>
             <label>Identity number</label>
             <div className="row" style={{ gap: 4 }}>
               <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
@@ -229,13 +232,13 @@ export default function CalfRegistration({ search, onSearchChange }) {
               <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
             </div>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 2' }}>
             <label>Namlits Ownership</label>
             <select value={f.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
               {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 2' }}>
             <label>Sex</label>
             <select value={f.sex} onChange={(e) => set('sex', e.target.value)}>
               <option value="">Select</option>
@@ -243,7 +246,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
               <option value="Female">Female</option>
             </select>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 2' }}>
             <label>Calf details</label>
             <select value={f.calf_details} onChange={(e) => set('calf_details', e.target.value)}>
               <option value="Single">Single</option>
@@ -254,15 +257,15 @@ export default function CalfRegistration({ search, onSearchChange }) {
               <option value="Triplet C">Triplet C</option>
             </select>
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 2' }}>
             <label>Birth mass (kg)</label>
             <input type="number" value={f.birth_mass} onChange={(e) => set('birth_mass', e.target.value)} step="0.1" />
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 3' }}>
             <label>Mother ID</label>
             <input value={f.mother_id} onChange={(e) => set('mother_id', e.target.value)} placeholder="Ear tag or identity no." />
           </div>
-          <div>
+          <div style={{ gridColumn: 'span 3' }}>
             <label>Father ID</label>
             <input value={f.father_id} onChange={(e) => set('father_id', e.target.value)} placeholder="Ear tag or identity no." />
           </div>
@@ -346,19 +349,21 @@ export default function CalfRegistration({ search, onSearchChange }) {
         <div className="card">
           <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 500 }}>Register new calf</h3>
           <form onSubmit={handleSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
-              <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px 16px' }}>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label>Owner *</label>
                 <select required value={form.owner} onChange={(e) => update('owner', e.target.value)}>
                   <option value="">Select owner</option>
                   {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label>Breed</label>
-                <input value={form.breed} onChange={(e) => update('breed', e.target.value)} />
+                <select value={form.breed} onChange={(e) => update('breed', e.target.value)}>
+                  {BREEDS.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label>Color *</label>
                 <select required value={form.color} onChange={(e) => update('color', e.target.value)}>
                   <option value="">Select color</option>
@@ -379,15 +384,15 @@ export default function CalfRegistration({ search, onSearchChange }) {
                   <option value="15 - Nellore">15 - Nellore</option>
                 </select>
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label>Birth date *</label>
                 <input required type="date" value={form.birth_date} onChange={(e) => update('birth_date', e.target.value)} />
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label>Ear tag number *</label>
                 <input required value={form.ear_tag} onChange={(e) => update('ear_tag', e.target.value)} placeholder="e.g. NA12345" />
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label>Identity number</label>
                 <div className="row" style={{ gap: 4 }}>
                   <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
@@ -395,14 +400,14 @@ export default function CalfRegistration({ search, onSearchChange }) {
                   <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
                 </div>
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label>Namlits Ownership</label>
                 <select value={form.namlits_ownership} onChange={(e) => update('namlits_ownership', e.target.value)}>
                   {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
               <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label>Sex</label>
                 <select value={form.sex} onChange={(e) => update('sex', e.target.value)}>
                   <option value="">Select</option>
@@ -410,7 +415,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
                   <option value="Female">Female</option>
                 </select>
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label>Calf details</label>
                 <select value={form.calf_details} onChange={(e) => update('calf_details', e.target.value)}>
                   <option value="Single">Single</option>
@@ -421,15 +426,15 @@ export default function CalfRegistration({ search, onSearchChange }) {
                   <option value="Triplet C">Triplet C</option>
                 </select>
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label>Birth mass (kg)</label>
                 <input type="number" value={form.birth_mass} onChange={(e) => update('birth_mass', e.target.value)} step="0.1" />
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label>Mother ID</label>
                 <input value={form.mother_id} onChange={(e) => update('mother_id', e.target.value)} placeholder="Ear tag or identity no." />
               </div>
-              <div>
+              <div style={{ gridColumn: 'span 3' }}>
                 <label>Father ID</label>
                 <input value={form.father_id} onChange={(e) => update('father_id', e.target.value)} placeholder="Ear tag or identity no." />
               </div>
