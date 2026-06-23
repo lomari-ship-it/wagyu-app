@@ -3,130 +3,51 @@ import { supabase, OWNERS, NAMLITS_OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
+const BREEDS = ['Wagyu', 'Angus', 'Simmentaler', 'Brahman', 'Hereford', 'Bonsmara', 'Limousin', 'Charolais', 'Other']
+const COLORS = [
+  '1 - Red', '2 - Red and white', '3 - White and red', '4 - Yellow', '5 - Roan',
+  '6 - White', '7 - Red with white on underline', '8 - Yellow and white', '9 - Black',
+  '10 - Brown', '11 - Grey', '12 - Gir', '13 - Guzerat', '14 - Indu Bra.', '15 - Nellore',
+]
 
-const emptyForm = {
-  owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
-  color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
-  namlits_ownership: 'Kalahari Wagyu',
-}
-
-export default function CalfRegistration({ search: parentSearch = '', onSearchChange }) {
+export default function CalfRegistration({ search, onSearchChange }) {
+  const idYear = new Date().getFullYear()
+  const emptyForm = {
+    owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
+    color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
+    namlits_ownership: 'Kalahari Wagyu',
+  }
   const [form, setForm] = useState(emptyForm)
   const [calves, setCalves] = useState([])
-  const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [statusMsg, setStatusMsg] = useState('')
-  const [localSearch, setLocalSearch] = useState(parentSearch)
+  const [error, setError] = useState(null)
+  const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [importing, setImporting] = useState(false)
-  const [importMsg, setImportMsg] = useState('')
-  const [showImport, setShowImport] = useState(false)
   const [editForm, setEditForm] = useState({})
-  const [listOpen, setListOpen] = useState(false)
-  const search = onSearchChange ? parentSearch : localSearch
-  const setSearch = onSearchChange || setLocalSearch
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState(null)
+  const [importResult, setImportResult] = useState(null)
 
-  useEffect(() => { loadCalves() }, [])
+  useEffect(() => { load() }, [])
 
-  async function loadCalves() {
+  async function load() {
     setLoading(true)
-    const { data, error } = await supabase.from('calves').select('*').order('created_at', { ascending: false })
-    if (!error) setCalves(data || [])
+    const { data } = await supabase.from('calves').select('*').order('created_at', { ascending: false })
+    setCalves(data || [])
     setLoading(false)
   }
 
-  async function handleImport(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    setImporting(true)
-    setImportMsg('Reading file...')
-
-    const text = await file.text()
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-    if (lines.length < 2) { setImportMsg('File is empty or has no data rows.'); setImporting(false); return }
-
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_'))
-    const rows = lines.slice(1)
-    const records = []
-
-    function parseDate(val) {
-      if (!val) return null
-      if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
-      const m = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-      if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
-      const m2 = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
-      if (m2) return `${m2[3].length === 2 ? '20' + m2[3] : m2[3]}-${m2[1].padStart(2,'0')}-${m2[2].padStart(2,'0')}`
-      return null
-    }
-
-    for (const row of rows) {
-      const values = row.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
-      const obj = {}
-      headers.forEach((h, i) => { obj[h] = values[i] || '' })
-
-      let identityNumber = obj.identity_number || null
-
-      records.push({
-        owner: obj.owner || '',
-        breed: obj.breed || 'Wagyu',
-        ear_tag: obj.ear_tag || '',
-        identity_number: identityNumber || null,
-        birth_date: parseDate(obj.birth_date),
-        color: obj.color || '',
-        sex: obj.sex || null,
-        calf_details: obj.calf_details || 'Single',
-        birth_mass: obj.birth_mass ? parseFloat(obj.birth_mass) : null,
-        mother_id: obj.mother_id || null,
-        father_id: obj.father_id || null,
-        notes: obj.notes || null,
-        namlits_ownership: obj.namlits_ownership || 'Kalahari Wagyu',
-      })
-    }
-
-    const valid = records.filter(r => r.owner && r.ear_tag && r.birth_date)
-    const skipped = records.length - valid.length
-
-    if (valid.length === 0) { setImportMsg('No valid rows found. Check owner, ear_tag and birth_date are filled.'); setImporting(false); return }
-
-    setImportMsg(`Importing ${valid.length} calves...`)
-
-    const { error } = await supabase.from('calves').insert(valid)
-    if (error) { setImportMsg('Import failed: ' + error.message); setImporting(false); return }
-
-    const cattleRows = valid.map(r => ({ animal_type: 'general', owner: r.owner, ear_tag: r.ear_tag, identity_number: r.identity_number || null }))
-    await supabase.from('cattle_register').insert(cattleRows)
-
-    setImportMsg(`✓ Imported ${valid.length} calves${skipped > 0 ? `, ${skipped} rows skipped (missing required fields)` : ''}.`)
-    setImporting(false)
-    setShowImport(false)
-    loadCalves()
-    e.target.value = ''
-  }
-
-  async function deleteCalf(id) {
-    const inBatch = batches.some(b => (b.calf_ids || []).includes(id))
-    const msg = inBatch
-      ? 'This calf is already included in a batch. Deleting it will not affect the batch record, but the birth notification xlsx may be incomplete for this animal. Are you sure you want to delete?'
-      : 'Are you sure you want to delete this calf entry? This cannot be undone.'
-    if (!window.confirm(msg)) return
-    await supabase.from('calves').delete().eq('id', id)
-    loadCalves()
-  }
-
-  function update(field, value) { setForm((f) => ({ ...f, [field]: value })) }
-
-  const idYear = form.birth_date ? form.birth_date.slice(2, 4) : '--'
+  function update(field, value) { setForm(f => ({ ...f, [field]: value })) }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setSaving(true); setStatusMsg('Saving...')
-    let identityNumber = null
-    if (form.birth_date && form.identity_mid.trim()) {
-      identityNumber = `${form.birth_date.slice(2, 4)}-${form.identity_mid.trim()}JFW`
-    } else if (form.identity_mid.trim()) {
-      identityNumber = form.identity_mid.trim()
-    }
+    setSaving(true)
+    setError(null)
+    const mid = form.identity_mid.trim()
+    const identityNumber = mid ? `${idYear}-${mid}JFW` : null
     const { error } = await supabase.from('calves').insert({
       owner: form.owner, breed: form.breed, ear_tag: form.ear_tag,
       identity_number: identityNumber, birth_date: form.birth_date,
@@ -135,24 +56,22 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
       mother_id: form.mother_id || null, father_id: form.father_id || null, notes: form.notes || null,
       namlits_ownership: form.namlits_ownership || 'Kalahari Wagyu',
     })
-    if (error) { setStatusMsg('Save failed: ' + error.message) }
-    else {
-      await supabase.from('cattle_register').insert({
-        animal_type: 'general',
-        owner: form.owner,
-        ear_tag: form.ear_tag,
-        identity_number: identityNumber || null,
-      })
-      setStatusMsg('Saved.'); setForm({ ...emptyForm }); loadCalves(); setTimeout(() => setStatusMsg(''), 2500)
-    }
     setSaving(false)
+    if (error) { setError(error.message); return }
+    setForm(emptyForm)
+    setShowForm(false)
+    load()
   }
 
   function startEdit(calf) {
     setEditingId(calf.id)
-    const mid = calf.identity_number
-      ? calf.identity_number.replace(/^\d{2}-/, '').replace(/JFW$/, '')
-      : ''
+    setEditError(null)
+    const idYear2 = new Date().getFullYear()
+    let mid = ''
+    if (calf.identity_number) {
+      const m = calf.identity_number.match(/^\d{4}-(.*?)JFW$/)
+      if (m) mid = m[1]
+    }
     setEditForm({
       owner: calf.owner || '',
       breed: calf.breed || 'Wagyu',
@@ -171,12 +90,11 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
   }
 
   async function saveEdit(calf) {
-    let identityNumber = null
-    if (editForm.birth_date && editForm.identity_mid.trim()) {
-      identityNumber = `${editForm.birth_date.slice(2, 4)}-${editForm.identity_mid.trim()}JFW`
-    } else if (editForm.identity_mid.trim()) {
-      identityNumber = editForm.identity_mid.trim()
-    }
+    setEditSaving(true)
+    setEditError(null)
+    const idYear2 = new Date().getFullYear()
+    const mid = editForm.identity_mid.trim()
+    const identityNumber = mid ? `${idYear2}-${mid}JFW` : null
     const { error } = await supabase.from('calves').update({
       owner: editForm.owner, breed: editForm.breed, ear_tag: editForm.ear_tag,
       identity_number: identityNumber, birth_date: editForm.birth_date,
@@ -186,53 +104,86 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
       notes: editForm.notes || null,
       namlits_ownership: editForm.namlits_ownership || 'Kalahari Wagyu',
     }).eq('id', calf.id)
-    if (!error) { setEditingId(null); loadCalves() }
+    setEditSaving(false)
+    if (error) { setEditError(error.message); return }
+    setEditingId(null)
+    load()
   }
 
-  const searchLower = search.toLowerCase()
-  const displayed = calves
-    .filter((c) => !search || (c.ear_tag || '').toLowerCase().includes(searchLower) || (c.identity_number || '').toLowerCase().includes(searchLower))
+  async function deleteCalf(id) {
+    if (!window.confirm('Delete this calf registration?')) return
+    await supabase.from('calves').delete().eq('id', id)
+    load()
+  }
 
-  return (
-    <div className="stack" style={{ gap: 24 }}>
-      <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Calf Registrations</h2>
-          <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span className="muted">{calves.length} entries</span>
-            <div className="row" style={{ gap: 6 }}>
-              <button onClick={() => setShowImport(v => !v)} style={{ fontSize: 12 }}>Import from CSV</button>
-            </div>
-          </div>
-          {showImport && (
-            <div style={{ marginTop: 8, padding: '12px', background: 'var(--color-accent-light)', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)' }}>
-              <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>Import calves from CSV</div>
-              <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-                Upload a CSV file with columns: owner, breed, ear_tag, identity_number, birth_date (YYYY-MM-DD), color, sex, calf_details, birth_mass, mother_id, father_id, notes, namlits_ownership.
-                Required: owner, ear_tag, birth_date.
-              </p>
-              <div className="row">
-                <input type="file" accept=".csv" onChange={handleImport} disabled={importing} style={{ fontSize: 13 }} />
-                {importMsg && <span className="muted" style={{ fontSize: 12 }}>{importMsg}</span>}
-              </div>
-            </div>
-          )}
-        </div>
-        <form onSubmit={handleSubmit} className="grid-form" style={{ marginBottom: 12 }}>
+  async function handleImport(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setImportLoading(true)
+    setImportError(null)
+    setImportResult(null)
+    const text = await file.text()
+    const lines = text.trim().split('\n')
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+    let inserted = 0, skipped = 0, errors = []
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const row = {}
+      headers.forEach((h, idx) => { row[h] = vals[idx] || '' })
+      if (!row.ear_tag && !row['ear tag']) { skipped++; continue }
+      const earTag = row.ear_tag || row['ear tag']
+      const { error } = await supabase.from('calves').insert({
+        owner: row.owner || '', breed: row.breed || 'Wagyu',
+        ear_tag: earTag, identity_number: row.identity_number || row['identity number'] || null,
+        birth_date: row.birth_date || row['birth date'] || null,
+        color: row.color || null, sex: row.sex || null,
+        calf_details: row.calf_details || row['calf details'] || 'Single',
+        birth_mass: row.birth_mass ? Number(row.birth_mass) : null,
+        mother_id: row.mother_id || null, father_id: row.father_id || null,
+        notes: row.notes || null,
+        namlits_ownership: row.namlits_ownership || 'Kalahari Wagyu',
+      })
+      if (error) errors.push(`Row ${i}: ${error.message}`)
+      else inserted++
+    }
+    setImportLoading(false)
+    setImportResult({ inserted, skipped, errors })
+    if (inserted > 0) load()
+    e.target.value = ''
+  }
+
+  const filtered = calves.filter(c => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      (c.ear_tag || '').toLowerCase().includes(q) ||
+      (c.identity_number || '').toLowerCase().includes(q) ||
+      (c.owner || '').toLowerCase().includes(q) ||
+      (c.breed || '').toLowerCase().includes(q)
+    )
+  })
+
+  function EditCalfCard({ calf }) {
+    const f = editForm
+    const idYear = new Date().getFullYear()
+    function set(field, value) { setEditForm(prev => ({ ...prev, [field]: value })) }
+    return (
+      <div className="card" style={{ border: '2px solid var(--color-primary)', padding: '16px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
           <div>
-            <label>Owner *</label>
-            <select required value={form.owner} onChange={(e) => update('owner', e.target.value)}>
+            <label>Owner</label>
+            <select value={f.owner} onChange={(e) => set('owner', e.target.value)}>
               <option value="">Select owner</option>
-              {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+              {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
           <div>
-            <label>Breed *</label>
-            <select required value={form.breed} onChange={(e) => update('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select>
+            <label>Breed</label>
+            <input value={f.breed} onChange={(e) => set('breed', e.target.value)} />
           </div>
           <div>
-            <label>Color *</label>
-            <select required value={form.color} onChange={(e) => update('color', e.target.value)}>
+            <label>Color</label>
+            <select value={f.color} onChange={(e) => set('color', e.target.value)}>
               <option value="">Select color</option>
               <option value="1 - Red">1 - Red</option>
               <option value="2 - Red and white">2 - Red and white</option>
@@ -252,31 +203,30 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
             </select>
           </div>
           <div>
-            <label>Namlits Ownership</label>
-            <select value={form.namlits_ownership} onChange={(e) => update('namlits_ownership', e.target.value)}>
-              {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <label>Birth date</label>
+            <input type="date" value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} />
           </div>
           <div>
-            <label>Birth date *</label>
-            <input required type="date" value={form.birth_date} onChange={(e) => update('birth_date', e.target.value)} />
-          </div>
-          <div>
-            <label>Ear tag number *</label>
-            <input required value={form.ear_tag} onChange={(e) => update('ear_tag', e.target.value)} placeholder="e.g. NA12345" />
+            <label>Ear tag</label>
+            <input value={f.ear_tag} onChange={(e) => set('ear_tag', e.target.value)} />
           </div>
           <div>
             <label>Identity number</label>
             <div className="row" style={{ gap: 4 }}>
               <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
-              <input value={form.identity_mid} onChange={(e) => update('identity_mid', e.target.value)} placeholder="0001" style={{ flex: 1, minWidth: 0 }} />
+              <input value={f.identity_mid} onChange={(e) => set('identity_mid', e.target.value)} style={{ flex: 1, minWidth: 0 }} />
               <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
             </div>
           </div>
-          <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
+          <div>
+            <label>Namlits Ownership</label>
+            <select value={f.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
+              {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
           <div>
             <label>Sex</label>
-            <select value={form.sex} onChange={(e) => update('sex', e.target.value)}>
+            <select value={f.sex} onChange={(e) => set('sex', e.target.value)}>
               <option value="">Select</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
@@ -284,213 +234,214 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
           </div>
           <div>
             <label>Calf details</label>
-            <select value={form.calf_details} onChange={(e) => update('calf_details', e.target.value)}>
+            <select value={f.calf_details} onChange={(e) => set('calf_details', e.target.value)}>
               <option value="Single">Single</option>
-              <option value="Twin">Twin</option>
-              <option value="Multiple">Multiple</option>
+              <option value="Twin A">Twin A</option>
+              <option value="Twin B">Twin B</option>
+              <option value="Triplet A">Triplet A</option>
+              <option value="Triplet B">Triplet B</option>
+              <option value="Triplet C">Triplet C</option>
             </select>
           </div>
           <div>
             <label>Birth mass (kg)</label>
-            <input type="number" step="0.1" min="0" value={form.birth_mass} onChange={(e) => update('birth_mass', e.target.value)} placeholder="e.g. 35.5" />
+            <input type="number" value={f.birth_mass} onChange={(e) => set('birth_mass', e.target.value)} step="0.1" />
           </div>
           <div>
             <label>Mother ID</label>
-            <input value={form.mother_id} onChange={(e) => update('mother_id', e.target.value)} placeholder="optional" />
+            <input value={f.mother_id} onChange={(e) => set('mother_id', e.target.value)} placeholder="Ear tag or identity no." />
           </div>
           <div>
             <label>Father ID</label>
-            <input value={form.father_id} onChange={(e) => update('father_id', e.target.value)} placeholder="optional" />
+            <input value={f.father_id} onChange={(e) => set('father_id', e.target.value)} placeholder="Ear tag or identity no." />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label>Additional notes</label>
-            <textarea rows={2} style={{ width: '100%', resize: 'vertical' }} value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Any other observations" />
+            <label>Notes</label>
+            <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical' }} />
           </div>
-          <div style={{ gridColumn: '1 / -1' }} className="row">
-            <button type="submit" className="primary" disabled={saving}>Save calf entry</button>
-            <span className="muted">{statusMsg}</span>
-          </div>
-        </form>
+        </div>
+        {editError && <p style={{ color: 'var(--color-danger)', margin: '8px 0 0' }}>{editError}</p>}
+        <div className="row" style={{ marginTop: 12, gap: 8 }}>
+          <button className="primary" onClick={() => saveEdit(calf)} disabled={editSaving}>
+            {editSaving ? 'Saving…' : 'Save changes'}
+          </button>
+          <button onClick={() => setEditingId(null)}>Cancel</button>
+        </div>
       </div>
+    )
+  }
 
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+  function CalfCard({ calf }) {
+    if (editingId === calf.id) return <EditCalfCard calf={calf} />
+    return (
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ fontWeight: 500 }}>
+              {calf.ear_tag}
+              {calf.identity_number && <span className="muted" style={{ marginLeft: 8, fontSize: 13 }}>{calf.identity_number}</span>}
+            </div>
+            <div className="muted">
+              {calf.owner} &middot; Born {formatDate(calf.birth_date)} &middot; {calf.color}
+              {calf.namlits_ownership && ` · ${calf.namlits_ownership}`}
+              {calf.sex && ` · ${calf.sex}`}
+              {calf.calf_details && calf.calf_details !== 'Single' && ` · ${calf.calf_details}`}
+              {calf.birth_mass && ` · ${calf.birth_mass}kg`}
+            </div>
+          </div>
+          <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+            {calf.sold_flag && <span className="badge neutral">Sold/Transferred</span>}
+            <button style={{ fontSize: 12 }} onClick={() => startEdit(calf)}>Edit</button>
+            <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteCalf(calf.id)}>Delete</button>
+          </div>
+        </div>
+        {calf.notes && <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>{calf.notes}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="stack">
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           type="text"
+          placeholder="Search ear tag, identity no., owner…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by ear tag or identity number..."
-          style={{ flex: 1, minWidth: 240, maxWidth: 360 }}
+          onChange={e => onSearchChange(e.target.value)}
+          style={{ flex: 1, minWidth: 200 }}
         />
+        <button className="primary" onClick={() => setShowForm(v => !v)}>
+          {showForm ? 'Cancel' : '+ Register calf'}
+        </button>
+        <label style={{ cursor: 'pointer' }}>
+          <span className="button">{importLoading ? 'Importing…' : 'Import CSV'}</span>
+          <input type="file" accept=".csv" onChange={handleImport} style={{ display: 'none' }} disabled={importLoading} />
+        </label>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <div
-          onClick={() => setListOpen(v => !v)}
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '12px 16px', userSelect: 'none' }}
-        >
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>Registered calves</h2>
-          <div className="row" style={{ gap: 12 }}>
-            <span className="muted">{displayed.length} record{displayed.length !== 1 ? 's' : ''}</span>
-            <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: listOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
-          </div>
-        </div>
-        {listOpen && (
-          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}>
-            {loading ? <p className="muted" style={{ marginTop: 12 }}>Loading...</p> : displayed.length === 0 ? (
-              <p className="muted" style={{ marginTop: 12 }}>{search ? `No calves match "${search}".` : 'No active calf entries.'}</p>
-            ) : (
-              <div className="stack" style={{ marginTop: 12 }}>
-                {displayed.map((c) =>
-                  editingId === c.id
-                    ? <EditCalfCard key={c.id} calf={c} editForm={editForm} setEditForm={setEditForm} onSave={() => saveEdit(c)} onCancel={() => setEditingId(null)} />
-                    : <CalfCard key={c.id} calf={c} onEdit={() => startEdit(c)} onDelete={() => deleteCalf(c.id)} />
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
-  const f = editForm
-  const set = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }))
-  const idYear = f.birth_date ? f.birth_date.slice(2, 4) : '--'
-  return (
-    <div className="card" style={{ border: '2px solid var(--color-accent)' }}>
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-        <strong>Editing: {calf.ear_tag}</strong>
-        <div className="row">
-          <button className="primary" onClick={onSave}>Save changes</button>
-          <button onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
-      <div className="grid-form">
-        <div>
-          <label>Owner</label>
-          <select value={f.owner} onChange={(e) => set('owner', e.target.value)}>
-            {OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <label>Breed</label>
-          <select value={f.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select>
-        </div>
-        <div>
-          <label>Color</label>
-          <select value={f.color} onChange={(e) => set('color', e.target.value)}>
-            <option value="">Select color</option>
-            <option value="1 - Red">1 - Red</option>
-            <option value="2 - Red and white">2 - Red and white</option>
-            <option value="3 - White and red">3 - White and red</option>
-            <option value="4 - Yellow">4 - Yellow</option>
-            <option value="5 - Roan">5 - Roan</option>
-            <option value="6 - White">6 - White</option>
-            <option value="7 - Red with white on underline">7 - Red with white on underline</option>
-            <option value="8 - Yellow and white">8 - Yellow and white</option>
-            <option value="9 - Black">9 - Black</option>
-            <option value="10 - Brown">10 - Brown</option>
-            <option value="11 - Grey">11 - Grey</option>
-            <option value="12 - Gir">12 - Gir</option>
-            <option value="13 - Guzerat">13 - Guzerat</option>
-            <option value="14 - Indu Bra.">14 - Indu Bra.</option>
-            <option value="15 - Nellore">15 - Nellore</option>
-          </select>
-        </div>
-        <div>
-          <label>Namlits Ownership</label>
-          <select value={f.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
-            {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        <div>
-          <label>Birth date</label>
-          <input type="date" value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} />
-        </div>
-        <div>
-          <label>Ear tag</label>
-          <input value={f.ear_tag} onChange={(e) => set('ear_tag', e.target.value)} />
-        </div>
-        <div>
-          <label>Identity number</label>
-          <div className="row" style={{ gap: 4 }}>
-            <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
-            <input value={f.identity_mid} onChange={(e) => set('identity_mid', e.target.value)} style={{ flex: 1, minWidth: 0 }} />
-            <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
-          </div>
-        </div>
-        <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
-        <div>
-          <label>Sex</label>
-          <select value={f.sex} onChange={(e) => set('sex', e.target.value)}>
-            <option value="">Select</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-          </select>
-        </div>
-        <div>
-          <label>Calf details</label>
-          <select value={f.calf_details} onChange={(e) => set('calf_details', e.target.value)}>
-            <option value="Single">Single</option>
-            <option value="Twin">Twin</option>
-            <option value="Multiple">Multiple</option>
-          </select>
-        </div>
-        <div>
-          <label>Birth mass (kg)</label>
-          <input type="number" step="0.1" min="0" value={f.birth_mass} onChange={(e) => set('birth_mass', e.target.value)} />
-        </div>
-        <div>
-          <label>Mother ID</label>
-          <input value={f.mother_id} onChange={(e) => set('mother_id', e.target.value)} />
-        </div>
-        <div>
-          <label>Father ID</label>
-          <input value={f.father_id} onChange={(e) => set('father_id', e.target.value)} />
-        </div>
-        <div style={{ gridColumn: '1 / -1' }}>
-          <label>Notes</label>
-          <textarea rows={2} style={{ width: '100%', resize: 'vertical' }} value={f.notes} onChange={(e) => set('notes', e.target.value)} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CalfCard({ calf, onEdit, onDelete }) {
-  return (
-    <div className="card">
-      <div>
-        <div>
-          <div className="row" style={{ marginBottom: 4 }}>
-            <strong>{calf.ear_tag}</strong>
-            {calf.breed && <span className="muted">{calf.breed}</span>}
-            {calf.identity_number && <span className="muted">ID: {calf.identity_number}</span>}
-            {calf.sold_flag && <span className="badge neutral">Sold/Transferred</span>}
-          </div>
-          <div className="muted">
-            {calf.owner} &middot; Born {formatDate(calf.birth_date)} &middot; {calf.color}
-            {calf.namlits_ownership && ` · ${calf.namlits_ownership}`}
-            {calf.sex && ` · ${calf.sex}`}
-            {calf.calf_details && calf.calf_details !== 'Single' && ` · ${calf.calf_details}`}
-            {calf.birth_mass && ` · ${calf.birth_mass} kg`}
-          </div>
-          {(calf.mother_id || calf.father_id) && (
-            <div className="muted" style={{ marginTop: 2 }}>
-              {calf.mother_id && `Dam: ${calf.mother_id}`}
-              {calf.mother_id && calf.father_id && ' · '}
-              {calf.father_id && `Sire: ${calf.father_id}`}
-            </div>
+      {importResult && (
+        <div className="card" style={{ padding: '10px 14px' }}>
+          <p style={{ margin: 0 }}>Import complete: <strong>{importResult.inserted}</strong> inserted, <strong>{importResult.skipped}</strong> skipped.</p>
+          {importResult.errors.length > 0 && (
+            <ul style={{ margin: '6px 0 0', paddingLeft: 16, fontSize: 13, color: 'var(--color-danger)' }}>
+              {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
           )}
-          {calf.notes && <div className="muted" style={{ marginTop: 4 }}>{calf.notes}</div>}
         </div>
-        <div className="row" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)', gap: 6 }}>
-          <button style={{ fontSize: 12 }} onClick={onEdit}>Edit</button>
-          <button className="danger-text" style={{ fontSize: 12 }} onClick={onDelete}>Delete</button>
+      )}
+
+      {showForm && (
+        <div className="card">
+          <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 500 }}>Register new calf</h3>
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
+              <div>
+                <label>Owner *</label>
+                <select required value={form.owner} onChange={(e) => update('owner', e.target.value)}>
+                  <option value="">Select owner</option>
+                  {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>Breed</label>
+                <input value={form.breed} onChange={(e) => update('breed', e.target.value)} />
+              </div>
+              <div>
+                <label>Color *</label>
+                <select required value={form.color} onChange={(e) => update('color', e.target.value)}>
+                  <option value="">Select color</option>
+                  <option value="1 - Red">1 - Red</option>
+                  <option value="2 - Red and white">2 - Red and white</option>
+                  <option value="3 - White and red">3 - White and red</option>
+                  <option value="4 - Yellow">4 - Yellow</option>
+                  <option value="5 - Roan">5 - Roan</option>
+                  <option value="6 - White">6 - White</option>
+                  <option value="7 - Red with white on underline">7 - Red with white on underline</option>
+                  <option value="8 - Yellow and white">8 - Yellow and white</option>
+                  <option value="9 - Black">9 - Black</option>
+                  <option value="10 - Brown">10 - Brown</option>
+                  <option value="11 - Grey">11 - Grey</option>
+                  <option value="12 - Gir">12 - Gir</option>
+                  <option value="13 - Guzerat">13 - Guzerat</option>
+                  <option value="14 - Indu Bra.">14 - Indu Bra.</option>
+                  <option value="15 - Nellore">15 - Nellore</option>
+                </select>
+              </div>
+              <div>
+                <label>Birth date *</label>
+                <input required type="date" value={form.birth_date} onChange={(e) => update('birth_date', e.target.value)} />
+              </div>
+              <div>
+                <label>Ear tag number *</label>
+                <input required value={form.ear_tag} onChange={(e) => update('ear_tag', e.target.value)} placeholder="e.g. NA12345" />
+              </div>
+              <div>
+                <label>Identity number</label>
+                <div className="row" style={{ gap: 4 }}>
+                  <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
+                  <input value={form.identity_mid} onChange={(e) => update('identity_mid', e.target.value)} placeholder="0001" style={{ flex: 1, minWidth: 0 }} />
+                  <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
+                </div>
+              </div>
+              <div>
+                <label>Namlits Ownership</label>
+                <select value={form.namlits_ownership} onChange={(e) => update('namlits_ownership', e.target.value)}>
+                  {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
+              <div>
+                <label>Sex</label>
+                <select value={form.sex} onChange={(e) => update('sex', e.target.value)}>
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <div>
+                <label>Calf details</label>
+                <select value={form.calf_details} onChange={(e) => update('calf_details', e.target.value)}>
+                  <option value="Single">Single</option>
+                  <option value="Twin A">Twin A</option>
+                  <option value="Twin B">Twin B</option>
+                  <option value="Triplet A">Triplet A</option>
+                  <option value="Triplet B">Triplet B</option>
+                  <option value="Triplet C">Triplet C</option>
+                </select>
+              </div>
+              <div>
+                <label>Birth mass (kg)</label>
+                <input type="number" value={form.birth_mass} onChange={(e) => update('birth_mass', e.target.value)} step="0.1" />
+              </div>
+              <div>
+                <label>Mother ID</label>
+                <input value={form.mother_id} onChange={(e) => update('mother_id', e.target.value)} placeholder="Ear tag or identity no." />
+              </div>
+              <div>
+                <label>Father ID</label>
+                <input value={form.father_id} onChange={(e) => update('father_id', e.target.value)} placeholder="Ear tag or identity no." />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label>Notes</label>
+                <textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical' }} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                {error && <p style={{ color: 'var(--color-danger)', margin: '0 0 8px' }}>{error}</p>}
+                <button type="submit" className="primary" disabled={saving}>
+                  {saving ? 'Saving…' : 'Register calf'}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
-      </div>
+      )}
+
+      {loading
+        ? <p className="muted">Loading…</p>
+        : filtered.length === 0
+          ? <p className="muted">No calves found.</p>
+          : filtered.map(c => <CalfCard key={c.id} calf={c} />)
+      }
     </div>
   )
 }
