@@ -3,7 +3,7 @@ import { supabase, OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
-const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '' }
+const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '', namlits_ownership: 'Kalahari Wagyu' }
 const emptyTransfer = { type: '', date: '', customer: '', invoice_number: '', breed: 'Wagyu', sex: '', date_of_birth: '' }
 
 function sortRecords(records) {
@@ -91,6 +91,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
       ear_tag: bForm.ear_tag, identity_number: bForm.identity_number || null,
       sex: bForm.sex || null, date_of_birth: bForm.date_of_birth || null,
       mother_id: bForm.mother_id || null, father_id: bForm.father_id || null,
+      namlits_ownership: bForm.namlits_ownership || 'Kalahari Wagyu',
     })
     if (error) { setBMsg('Failed: ' + error.message) }
     else { setBMsg('Saved.'); setBForm(emptyBreeding); load(); setTimeout(() => setBMsg(''), 2500) }
@@ -338,6 +339,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
               <div><label>Sex *</label><select required value={bForm.sex} onChange={(e) => setBForm((f) => ({ ...f, sex: e.target.value }))}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
               <div><label>Date of birth *</label><input required type="date" value={bForm.date_of_birth} onChange={(e) => setBForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></div>
               <div><label>Breed *</label><select required value={bForm.breed} onChange={(e) => setBForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></div>
+              <div><label>Namlits Ownership</label><select value={bForm.namlits_ownership||'Kalahari Wagyu'} onChange={(e)=>setBForm(f=>({...f,namlits_ownership:e.target.value}))}>{NAMLITS_OWNERS.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
               <div style={{ gridColumn: '1 / -1' }} className="row">
                 <button type="submit" className="primary" disabled={bSaving}>Add breeding animal</button>
                 <span className="muted">{bMsg}</span>
