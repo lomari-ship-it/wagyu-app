@@ -113,8 +113,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
   function exportCSV() {
     const headers = ['ear_tag','identity_number','owner','breed','birth_date','color','sex','calf_details','birth_mass','mother_id','father_id','namlits_ownership','notes']
     const rows = calves.map(r => headers.map(h => { const v = r[h] ?? ''; const s = String(v); return s.includes(',') ? '"' + s + '"' : s }).join(','))
-    const csv = [headers.join(','), ...rows].join('
-')
+    const csv = [headers.join(','), ...rows].join(String.fromCharCode(10))
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url
