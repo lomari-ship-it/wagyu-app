@@ -33,12 +33,21 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
   const [breedingOpen, setBreedingOpen] = useState(false)
   const [generalOpen,  setGeneralOpen]  = useState(false)
   const [archivedOpen, setArchivedOpen] = useState(false)
+  const [namlitsMap,   setNamlitsMap]   = useState({})
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('cattle_register').select('*')
+    const [{ data }, { data: calvesData }] = await Promise.all([
+      supabase.from('cattle_register').select('*'),
+      supabase.from('calves').select('ear_tag, namlits_ownership'),
+    ])
+    if (calvesData) {
+      const map = {}
+      calvesData.forEach(c => { if (c.ear_tag) map[c.ear_tag] = c.namlits_ownership })
+      setNamlitsMap(map)
+    }
     if (data) {
       setBreeding(sortRecords(data.filter((r) => r.animal_type === 'breeding' && !r.archived)))
       setGeneral(sortRecords(data.filter((r) => r.animal_type !== 'breeding' && !r.archived)))
@@ -337,7 +346,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             {loading ? <p className="muted">Loading...</p> : breeding.length === 0 ? <p className="muted">No breeding animals registered yet.</p> : (
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother</th><th>Father</th><th></th></tr></thead>
+                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother</th><th>Father</th><th>Namlits</th><th></th></tr></thead>
                   <tbody>
                     {breeding.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={true} />
@@ -352,6 +361,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
+                          <td><span className="muted" style={{ fontSize: 11 }}>{namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
@@ -363,7 +373,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                       )
                     })}
                   </tbody>
-                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={8}>Total breeding animals</td><td style={{ textAlign: 'right' }}>{breeding.length}</td></tr></tfoot>
+                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={9}>Total breeding animals</td><td style={{ textAlign: 'right' }}>{breeding.length}</td></tr></tfoot>
                 </table>
               </div>
             )}
@@ -379,7 +389,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             {loading ? null : general.length === 0 ? <p className="muted">No general cattle records yet.</p> : (
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th></th></tr></thead>
+                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th>Namlits</th><th></th></tr></thead>
                   <tbody>
                     {general.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={false} />
@@ -394,6 +404,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
+                          <td><span className="muted" style={{ fontSize: 11 }}>{namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
@@ -405,7 +416,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                       )
                     })}
                   </tbody>
-                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={8}>Total cattle</td><td style={{ textAlign: 'right' }}>{general.length}</td></tr></tfoot>
+                  <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={9}>Total cattle</td><td style={{ textAlign: 'right' }}>{general.length}</td></tr></tfoot>
                 </table>
               </div>
             )}
