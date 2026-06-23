@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase, OWNERS } from '../lib/supabase'
+import { supabase, OWNERS, NAMLITS_OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
@@ -7,6 +7,7 @@ function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); r
 const emptyForm = {
   owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
   color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
+  namlits_ownership: 'Kalahari Wagyu',
 }
 
 export default function CalfRegistration({ search: parentSearch = '', onSearchChange }) {
@@ -35,17 +36,6 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
     setLoading(false)
   }
 
-  async function syncToRegister() {
-    const { data: existing } = await supabase.from('cattle_register').select('ear_tag').eq('animal_type', 'general')
-    const existingTags = new Set((existing || []).map((r) => r.ear_tag))
-    const toAdd = calves.filter((c) => !existingTags.has(c.ear_tag))
-    if (toAdd.length === 0) { alert('All calves are already in the General cattle register.'); return }
-    const rows = toAdd.map((c) => ({ animal_type: 'general', owner: c.owner, ear_tag: c.ear_tag, identity_number: c.identity_number || null }))
-    const { error } = await supabase.from('cattle_register').insert(rows)
-    if (error) { alert('Sync failed: ' + error.message) }
-    else { alert(`${toAdd.length} calf record${toAdd.length !== 1 ? 's' : ''} added to General cattle register.`) }
-  }
-
   async function handleImport(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -62,12 +52,9 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
 
     function parseDate(val) {
       if (!val) return null
-      // Accept YYYY-MM-DD
       if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
-      // Accept DD/MM/YYYY or DD-MM-YYYY
       const m = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
       if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
-      // Accept MM/DD/YYYY
       const m2 = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
       if (m2) return `${m2[3].length === 2 ? '20' + m2[3] : m2[3]}-${m2[1].padStart(2,'0')}-${m2[2].padStart(2,'0')}`
       return null
@@ -93,6 +80,7 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
         mother_id: obj.mother_id || null,
         father_id: obj.father_id || null,
         notes: obj.notes || null,
+        namlits_ownership: obj.namlits_ownership || 'Kalahari Wagyu',
       })
     }
 
@@ -106,7 +94,6 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
     const { error } = await supabase.from('calves').insert(valid)
     if (error) { setImportMsg('Import failed: ' + error.message); setImporting(false); return }
 
-    // Also add to general cattle register
     const cattleRows = valid.map(r => ({ animal_type: 'general', owner: r.owner, ear_tag: r.ear_tag, identity_number: r.identity_number || null }))
     await supabase.from('cattle_register').insert(cattleRows)
 
@@ -146,10 +133,10 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
       color: form.color, sex: form.sex || null, calf_details: form.calf_details,
       birth_mass: form.birth_mass ? Number(form.birth_mass) : null,
       mother_id: form.mother_id || null, father_id: form.father_id || null, notes: form.notes || null,
+      namlits_ownership: form.namlits_ownership || 'Kalahari Wagyu',
     })
     if (error) { setStatusMsg('Save failed: ' + error.message) }
     else {
-      // Auto-add to general cattle register
       await supabase.from('cattle_register').insert({
         animal_type: 'general',
         owner: form.owner,
@@ -179,6 +166,7 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
       mother_id: calf.mother_id || '',
       father_id: calf.father_id || '',
       notes: calf.notes || '',
+      namlits_ownership: calf.namlits_ownership || 'Kalahari Wagyu',
     })
   }
 
@@ -196,13 +184,10 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
       birth_mass: editForm.birth_mass ? Number(editForm.birth_mass) : null,
       mother_id: editForm.mother_id || null, father_id: editForm.father_id || null,
       notes: editForm.notes || null,
+      namlits_ownership: editForm.namlits_ownership || 'Kalahari Wagyu',
     }).eq('id', calf.id)
     if (!error) { setEditingId(null); loadCalves() }
   }
-
-
-
-
 
   const searchLower = search.toLowerCase()
   const displayed = calves
@@ -223,7 +208,7 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
             <div style={{ marginTop: 8, padding: '12px', background: 'var(--color-accent-light)', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)' }}>
               <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>Import calves from CSV</div>
               <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-                Upload a CSV file with columns: owner, breed, ear_tag, identity_number, birth_date (YYYY-MM-DD), color, sex, calf_details, birth_mass, mother_id, father_id, notes.
+                Upload a CSV file with columns: owner, breed, ear_tag, identity_number, birth_date (YYYY-MM-DD), color, sex, calf_details, birth_mass, mother_id, father_id, notes, namlits_ownership.
                 Required: owner, ear_tag, birth_date.
               </p>
               <div className="row">
@@ -246,22 +231,6 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
             <select required value={form.breed} onChange={(e) => update('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select>
           </div>
           <div>
-            <label>Ear tag number *</label>
-            <input required value={form.ear_tag} onChange={(e) => update('ear_tag', e.target.value)} placeholder="e.g. NA12345" />
-          </div>
-          <div>
-            <label>Identity number</label>
-            <div className="row" style={{ gap: 4 }}>
-              <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
-              <input value={form.identity_mid} onChange={(e) => update('identity_mid', e.target.value)} placeholder="0001" style={{ flex: 1, minWidth: 0 }} />
-              <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
-            </div>
-          </div>
-          <div>
-            <label>Birth date *</label>
-            <input required type="date" value={form.birth_date} onChange={(e) => update('birth_date', e.target.value)} />
-          </div>
-          <div>
             <label>Color *</label>
             <select required value={form.color} onChange={(e) => update('color', e.target.value)}>
               <option value="">Select color</option>
@@ -281,6 +250,28 @@ export default function CalfRegistration({ search: parentSearch = '', onSearchCh
               <option value="14 - Indu Bra.">14 - Indu Bra.</option>
               <option value="15 - Nellore">15 - Nellore</option>
             </select>
+          </div>
+          <div>
+            <label>Namlits Ownership</label>
+            <select value={form.namlits_ownership} onChange={(e) => update('namlits_ownership', e.target.value)}>
+              {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Birth date *</label>
+            <input required type="date" value={form.birth_date} onChange={(e) => update('birth_date', e.target.value)} />
+          </div>
+          <div>
+            <label>Ear tag number *</label>
+            <input required value={form.ear_tag} onChange={(e) => update('ear_tag', e.target.value)} placeholder="e.g. NA12345" />
+          </div>
+          <div>
+            <label>Identity number</label>
+            <div className="row" style={{ gap: 4 }}>
+              <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
+              <input value={form.identity_mid} onChange={(e) => update('identity_mid', e.target.value)} placeholder="0001" style={{ flex: 1, minWidth: 0 }} />
+              <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
+            </div>
           </div>
           <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
           <div>
@@ -388,6 +379,37 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
           <select value={f.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select>
         </div>
         <div>
+          <label>Color</label>
+          <select value={f.color} onChange={(e) => set('color', e.target.value)}>
+            <option value="">Select color</option>
+            <option value="1 - Red">1 - Red</option>
+            <option value="2 - Red and white">2 - Red and white</option>
+            <option value="3 - White and red">3 - White and red</option>
+            <option value="4 - Yellow">4 - Yellow</option>
+            <option value="5 - Roan">5 - Roan</option>
+            <option value="6 - White">6 - White</option>
+            <option value="7 - Red with white on underline">7 - Red with white on underline</option>
+            <option value="8 - Yellow and white">8 - Yellow and white</option>
+            <option value="9 - Black">9 - Black</option>
+            <option value="10 - Brown">10 - Brown</option>
+            <option value="11 - Grey">11 - Grey</option>
+            <option value="12 - Gir">12 - Gir</option>
+            <option value="13 - Guzerat">13 - Guzerat</option>
+            <option value="14 - Indu Bra.">14 - Indu Bra.</option>
+            <option value="15 - Nellore">15 - Nellore</option>
+          </select>
+        </div>
+        <div>
+          <label>Namlits Ownership</label>
+          <select value={f.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
+            {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <label>Birth date</label>
+          <input type="date" value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} />
+        </div>
+        <div>
           <label>Ear tag</label>
           <input value={f.ear_tag} onChange={(e) => set('ear_tag', e.target.value)} />
         </div>
@@ -398,31 +420,6 @@ function EditCalfCard({ calf, editForm, setEditForm, onSave, onCancel }) {
             <input value={f.identity_mid} onChange={(e) => set('identity_mid', e.target.value)} style={{ flex: 1, minWidth: 0 }} />
             <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
           </div>
-        </div>
-        <div>
-          <label>Birth date</label>
-          <input type="date" value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} />
-        </div>
-        <div>
-          <label>Color</label>
-          <select value={f.color} onChange={(e) => set('color', e.target.value)}>
-              <option value="">Select color</option>
-              <option value="1 - Red">1 - Red</option>
-              <option value="2 - Red and white">2 - Red and white</option>
-              <option value="3 - White and red">3 - White and red</option>
-              <option value="4 - Yellow">4 - Yellow</option>
-              <option value="5 - Roan">5 - Roan</option>
-              <option value="6 - White">6 - White</option>
-              <option value="7 - Red with white on underline">7 - Red with white on underline</option>
-              <option value="8 - Yellow and white">8 - Yellow and white</option>
-              <option value="9 - Black">9 - Black</option>
-              <option value="10 - Brown">10 - Brown</option>
-              <option value="11 - Grey">11 - Grey</option>
-              <option value="12 - Gir">12 - Gir</option>
-              <option value="13 - Guzerat">13 - Guzerat</option>
-              <option value="14 - Indu Bra.">14 - Indu Bra.</option>
-              <option value="15 - Nellore">15 - Nellore</option>
-            </select>
         </div>
         <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 8 }} />
         <div>
@@ -475,6 +472,7 @@ function CalfCard({ calf, onEdit, onDelete }) {
           </div>
           <div className="muted">
             {calf.owner} &middot; Born {formatDate(calf.birth_date)} &middot; {calf.color}
+            {calf.namlits_ownership && ` · ${calf.namlits_ownership}`}
             {calf.sex && ` · ${calf.sex}`}
             {calf.calf_details && calf.calf_details !== 'Single' && ` · ${calf.calf_details}`}
             {calf.birth_mass && ` · ${calf.birth_mass} kg`}
@@ -493,8 +491,6 @@ function CalfCard({ calf, onEdit, onDelete }) {
           <button className="danger-text" style={{ fontSize: 12 }} onClick={onDelete}>Delete</button>
         </div>
       </div>
-
-
     </div>
   )
 }
