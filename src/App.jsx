@@ -10,6 +10,7 @@ import LateRegistrations from './components/LateRegistrations'
 import KitaiTransfers from './components/KitaiTransfers'
 import LevyList from './components/LevyList'
 import NamibianWagyuSociety from './components/NamibianWagyuSociety'
+import Namlits from './components/Namlits'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'reconciliation', label: 'Reconciliation by Owner' },
   { id: 'levy', label: 'Levy List' },
   { id: 'nws', label: 'Namibian Wagyu Society' },
+  { id: 'namlits', label: 'Namlits' },
 ]
 
 export default function App() {
@@ -81,6 +83,7 @@ export default function App() {
         {tab === 'reconciliation' && <Reconciliation search={search} onSearchChange={setSearch} />}
         {tab === 'levy' && <LevyList search={search} onSearchChange={setSearch} />}
         {tab === 'nws' && <NamibianWagyuSociety />}
+        {tab === 'namlits' && <Namlits />}
       </main>
     </div>
   )
