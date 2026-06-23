@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase, OWNERS } from '../lib/supabase'
+iimport { supabase, OWNERS, NAMLITS_OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
