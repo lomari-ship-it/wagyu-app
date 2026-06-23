@@ -324,6 +324,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
         <button className="primary" onClick={() => setShowForm(v => !v)}>
           {showForm ? 'Cancel' : '+ Register calf'}
         </button>
+        <button onClick={exportCSV} disabled={calves.length === 0}>Export CSV</button>
         <label style={{ cursor: 'pointer' }}>
           <span className="button">{importLoading ? 'Importing…' : 'Import CSV'}</span>
           <input type="file" accept=".csv" onChange={handleImport} style={{ display: 'none' }} disabled={importLoading} />
