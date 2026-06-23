@@ -12,5 +12,4 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export const OWNERS = ['J.A Delport', 'J.H.T Delport', 'D.B Delport']
-
 export const NAMLITS_OWNERS = ['Kalahari Wagyu', 'Kitai Abattoir', 'J.A Delport', 'J.H.T Delport', 'D.B Delport']
