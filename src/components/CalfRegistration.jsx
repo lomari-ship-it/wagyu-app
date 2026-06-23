@@ -110,6 +110,18 @@ export default function CalfRegistration({ search, onSearchChange }) {
     load()
   }
 
+  function exportCSV() {
+    const headers = ['ear_tag','identity_number','owner','breed','birth_date','color','sex','calf_details','birth_mass','mother_id','father_id','namlits_ownership','notes']
+    const rows = calves.map(r => headers.map(h => { const v = r[h] ?? ''; const s = String(v); return s.includes(',') ? '"' + s + '"' : s }).join(','))
+    const csv = [headers.join(','), ...rows].join('
+')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = 'calves_' + new Date().toISOString().slice(0,10) + '.csv'
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   async function deleteCalf(id) {
     if (!window.confirm('Delete this calf registration?')) return
     await supabase.from('calves').delete().eq('id', id)
