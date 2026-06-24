@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, NAMLITS_OWNERS } from '../lib/supabase'
 import ScrollTable from './ScrollTable'
+import ScrollTable from './ScrollTable'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
@@ -67,7 +68,7 @@ function CattleTable({ cattle, showSoldBadge = false }) {
           </tr>
         </tfoot>
       </table>
-    </div>
+    </ScrollTable>
   )
 }
 
