@@ -15,18 +15,24 @@ export default function Dashboard() {
   const [calves, setCalves] = useState([])
   const [cattle, setCattle] = useState([])
   const [batches, setBatches] = useState([])
+  const [societyMemberships, setSocietyMemberships] = useState([])
+  const [societyFees, setSocietyFees] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [c, r, b] = await Promise.all([
+      const [c, r, b, sm, sf] = await Promise.all([
         supabase.from('calves').select('id, owner, sold_flag, sold_payment_received_date'),
         supabase.from('cattle_register').select('id, owner'),
         supabase.from('batches').select('id, owner, submission_date, batch_report_number, invoice_amount_payable, payment_date, invoice_test_count'),
+        supabase.from('society_memberships').select('id, society, amount, payment_date'),
+        supabase.from('society_herd_fees').select('id, society, invoiced_amount, payment_date'),
       ])
       if (!c.error) setCalves(c.data || [])
       if (!r.error) setCattle(r.data || [])
       if (!b.error) setBatches(b.data || [])
+      if (!sm.error) setSocietyMemberships(sm.data || [])
+      if (!sf.error) setSocietyFees(sf.data || [])
       setLoading(false)
     }
     load()
