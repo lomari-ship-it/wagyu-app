@@ -84,7 +84,7 @@ export default function NamibianWagyuSociety() {
       </div>
       <div className="card" style={{ padding:0 }}>
         <div onClick={()=>setMembershipOpen(v=>!v)} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'14px 16px',userSelect:'none' }}>
-          <h3 style={{ margin:0,fontSize:16,fontWeight:500 }}>Section 1 — Annual Membership</h3>
+          <h3 style={{ margin:0,fontSize:16,fontWeight:500 }}>Annual Membership</h3>
           <span style={{ fontSize:18,color:'var(--color-text-muted)',transform:membershipOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform 0.2s' }}>&#8964;</span>
         </div>
         {membershipOpen && (
@@ -98,7 +98,7 @@ export default function NamibianWagyuSociety() {
       </div>
       <div className="card" style={{ padding:0 }}>
         <div onClick={()=>setCapitaOpen(v=>!v)} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'14px 16px',userSelect:'none' }}>
-          <h3 style={{ margin:0,fontSize:16,fontWeight:500 }}>Section 2 — Capita Fees</h3>
+          <h3 style={{ margin:0,fontSize:16,fontWeight:500 }}>Capita Fees</h3>
           <span style={{ fontSize:18,color:'var(--color-text-muted)',transform:capitaOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform 0.2s' }}>&#8964;</span>
         </div>
         {capitaOpen && (
