@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+function fmtDate(d) { if (!d) return '—'; const [y,m,day]=d.split('-'); return `${day}/${m}/${y}`; }
+
 function fmt(val) {
   const n = parseFloat(val)
   if (isNaN(n)) return '—'
@@ -208,7 +210,7 @@ function InvoiceReconciliation({ search = '' }) {
                       <td style={{ textAlign: 'right' }}>{b.invoice_test_count || <span className="faint">—</span>}</td>
                       <td style={{ textAlign: 'right' }}>{rate ? fmt(rate) : <span className="faint">—</span>}</td>
                       <td style={{ textAlign: 'right' }}>{total ? fmt(total) : <span className="faint">—</span>}</td>
-                      <td>{b.payment_date ? <span className="badge success">{b.payment_date}</span> : <span className="badge warning">Pending</span>}</td>
+                      <td>{b.payment_date ? <span className="badge success">{fmtDate(b.payment_date)}</span> : <span className="badge warning">Pending</span>}</td>
                       <td></td>
                     </tr>
                     {isExpanded && multiOwner && Object.entries(breakdown).map(([owner, qty]) => (
