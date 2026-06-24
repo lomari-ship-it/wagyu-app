@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, NAMLITS_OWNERS } from '../lib/supabase'
+import ScrollTable from './ScrollTable'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
@@ -18,14 +19,14 @@ function SectionHeader({ title, count, open, onToggle, badge }) {
         <span className="muted">{count} record{count !== 1 ? 's' : ''}</span>
         <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
       </div>
-    </div>
+    </ScrollTable>
   )
 }
 
 function CattleTable({ cattle, showSoldBadge = false }) {
   if (cattle.length === 0) return <p className="muted" style={{ margin: '12px 0' }}>No cattle in this category.</p>
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <ScrollTable>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -79,7 +80,15 @@ export default function Namlits() {
     ...Object.fromEntries(NAMLITS_OWNERS.map(o => [o, false])),
   })
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    loadData()
+    const sub = supabase
+      .channel('namlits-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calves' }, loadData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'kitai_transfers' }, loadData)
+      .subscribe()
+    return () => supabase.removeChannel(sub)
+  }, [])
 
   async function loadData() {
     setLoading(true)
@@ -142,8 +151,7 @@ export default function Namlits() {
               </tr>
             </tfoot>
           </table>
-        </div>
-      </div>
+        </ScrollTable>     </div>
 
       <div className="card" style={{ padding: 0 }}>
         <SectionHeader title="All registered cattle" count={allWithFlag.length} open={open.all} onToggle={() => toggle('all')} />
