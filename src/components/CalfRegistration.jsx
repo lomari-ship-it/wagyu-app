@@ -156,6 +156,8 @@ export default function CalfRegistration({ search, onSearchChange }) {
         mother_id: row.mother_id || null, father_id: row.father_id || null,
         notes: row.notes || null,
         namlits_ownership: row.namlits_ownership || 'Kalahari Wagyu',
+        sold_date: row.sold_date || row['sold date'] || null,
+        sold_flag: !!(row.sold_date || row['sold date']),
       })
       if (error) errors.push(`Row ${i}: ${error.message}`)
       else inserted++
