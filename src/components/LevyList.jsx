@@ -26,7 +26,10 @@ function animalsForYear(calves, breedingAnimals, fyStartYear, currentFY) {
     if (fyStartYear === 2023) { const id=(c.identity_number||'').toUpperCase(); return id.includes('ISA') }
     const id = (c.identity_number || '').toUpperCase()
     if (!id.includes('ISA') && !(includeKW && id.includes('KW'))) return false
-    if (isCurrentYear && c.sold_flag) return false
+    // Remove if sold before this financial year started
+    if (c.sold_date && c.sold_date < fyStart) return false
+    // For current year: also exclude if sold (no sold_date recorded)
+    if (isCurrentYear && c.sold_flag && !c.sold_date) return false
     return true
   })
   const fyBreeding = breedingAnimals.filter(b => b.purchase_date && b.purchase_date <= fyEnd)
@@ -94,7 +97,7 @@ export default function LevyList({ search = '', onSearchChange }) {
   async function loadAll() {
     setLoading(true)
     const [{ data: cData }, { data: bData }, { data: pData }] = await Promise.all([
-      supabase.from('calves').select('id,owner,ear_tag,identity_number,birth_date,sold_flag,namlits_ownership'),
+      supabase.from('calves').select('id,owner,ear_tag,identity_number,birth_date,sold_flag,sold_date,namlits_ownership'),
       supabase.from('cattle_register').select('id,owner,ear_tag,identity_number,purchase_date,namlits_ownership,breed').eq('animal_type', 'breeding'),
       supabase.from('levy_list_pdfs').select('*'),
     ])
