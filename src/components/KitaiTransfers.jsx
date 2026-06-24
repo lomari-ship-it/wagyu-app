@@ -1020,6 +1020,11 @@ function InvoicesTab({ saleInvoices, transfers, dnaInvoices, getDnaCostByEarTag,
     if (cattleIds.length > 0) {
       await supabase.from('cattle_register').update({ transfer_type: 'sold' }).in('id', cattleIds)
     }
+    // Also update calves.sold_flag and sold_date for calf-type transfers
+    const calfTransfers = selected.filter(t => t.animal_type === 'calf' && t.animal_id)
+    if (calfTransfers.length > 0) {
+      await Promise.all(calfTransfers.map(t => supabase.from('calves').update({ sold_flag: true, sold_date: t.transfer_date || new Date().toISOString().slice(0,10) }).eq('id', t.animal_id)))
+    }
 
     // Auto-generate the linked DNA cost recovery invoice (matched by ear tag / identity number,
     // cost pulled from the DNA cost recovery sub-tab's batch lookup). Status starts 'pending';
