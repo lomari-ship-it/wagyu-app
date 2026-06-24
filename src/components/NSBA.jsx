@@ -189,7 +189,7 @@ export default function NSBA() {
                 </div>
                 <div><label>Invoice number *</label><input required value={mForm.invoice_number} onChange={e => setMForm(f => ({ ...f, invoice_number: e.target.value }))} /></div>
                 <div><label>Invoice date *</label><input required type="date" value={mForm.invoice_date} onChange={e => setMForm(f => ({ ...f, invoice_date: e.target.value }))} /></div>
-                <div><label>Payment date</label><input type="date" value={mForm.payment_date} onChange={e => setMForm(f => ({ ...f, payment_date: e.target.value})) /></div>
+                <div><label>Payment date</label><input type="date" value={mForm.payment_date} onChange={e => setMForm(f => ({ ...f, payment_date: e.target.value }))} /></div>
                 <div><label>Total amount (N$) *</label><input required type="number" step="0.01" value={mForm.amount} onChange={e => setMForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" /></div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   {msg && <p style={{ color:'var(--color-danger)', margin:'0 0 8px' }}>{msg}</p>}
