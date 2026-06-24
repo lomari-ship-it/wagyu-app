@@ -174,7 +174,7 @@ export default function NSBA() {
       {/* Section 1: Annual Membership */}
       <div className="card" style={{ padding: 0 }}>
         <div onClick={() => setMembershipOpen(v => !v)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', padding:'14px 16px', userSelect:'none' }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Section 1 — Annual Membership</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Annual Membership</h3>
           <span style={{ fontSize: 18, color: 'var(--color-text-muted)', transform: membershipOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
         </div>
         {membershipOpen && (
@@ -244,7 +244,7 @@ export default function NSBA() {
       {/* Section 2: Herd Fees */}
       <div className="card" style={{ padding: 0 }}>
         <div onClick={() => setHerdOpen(v => !v)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', padding:'14px 16px', userSelect:'none' }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Section 2 — Herd Fees</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Herd Fees</h3>
           <span style={{ fontSize: 18, color:'var(--color-text-muted)', transform: herdOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition:'transform 0.2s' }}>&#8964;</span>
         </div>
         {herdOpen && (
