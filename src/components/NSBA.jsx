@@ -1,5 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase, OWNERS } from '../lib/supabase'
+import ScrollTable from './ScrollTable'
+
+const BUCKET = 'batch-documents'
+
+function InvoiceFile({ id, table, fileUrl, fileName, onUpdate }) {
+  const ref = useRef()
+  const [busy, setBusy] = useState(false)
+  async function upload(e) { const file=e.target.files[0]; if(!file) return; setBusy(true); const path=`invoices/${table}-${id}-${Date.now()}`; const {error}=await supabase.storage.from(BUCKET).upload(path,file,{upsert:true}); if(error){alert(error.message);setBusy(false);return}; const {data}=supabase.storage.from(BUCKET).getPublicUrl(path); await supabase.from(table).update({file_url:data.publicUrl,file_name:file.name}).eq('id',id); setBusy(false); onUpdate(); e.target.value='' }
+  async function remove() { if(!window.confirm('Remove invoice file?')) return; await supabase.from(table).update({file_url:null,file_name:null}).eq('id',id); onUpdate() }
+  return (<div className="row" style={{gap:8,marginTop:6,flexWrap:'wrap'}}><span className="muted" style={{fontSize:12}}>Invoice:</span>{fileUrl?<><a href={fileUrl} target="_blank" rel="noreferrer" style={{fontSize:12}}>📎 {fileName}</a><button onClick={remove} className="danger-text" style={{fontSize:11}}>Remove</button></>:<span className="muted" style={{fontSize:12}}>None uploaded</span>}<label style={{cursor:'pointer'}}><span className="button" style={{fontSize:11}}>{busy?'Uploading…':fileUrl?'Replace':'Upload'}</span><input ref={ref} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={upload} style={{display:'none'}} disabled={busy}/></label></div>)
+}
+
 
 function fmtDate(d) {
   if (!d) return '—'
@@ -104,7 +116,7 @@ export default function NSBA() {
 
   async function saveMembership(e) {
     e.preventDefault(); setSaving(true); setMsg('')
-    const { error } = await supabase.from('society_memberships').insert({ ...mForm, society: 'NSBA', amount: Number(mForm.amount) || null })
+    const { error } = await supabase.from('society_memberships').insert({ ...mForm, society: 'NSBA', amount: Number(mForm.amount)||null, invoice_date: mForm.invoice_date||null, payment_date: mForm.payment_date||null })
     setSaving(false)
     if (error) { setMsg(error.message); return }
     setMForm(emptyM); setShowMForm(false); loadAll()
@@ -251,7 +263,7 @@ export default function NSBA() {
           <div style={{ borderTop:'1px solid var(--color-border)', padding:16 }}>
             <button className="primary" style={{ marginBottom:16 }} onClick={() => setShowHForm(v => !v)}>{showHForm ? 'Cancel' : '+ Add invoice'}</button>
             {showHForm && (
-              <form onSubmit={saveHerdFee} className="grid-form" style={{ marginBottom:20 }}>
+              <form onSubmit={saveHerdFee} style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'12px 16px', marginBottom:20 }}>
                 <div><label>Membership year *</label>
                   <select required value={hForm.membership_year} onChange={e => setHForm(f => ({ ...f, membership_year: e.target.value }))}>
                     {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
