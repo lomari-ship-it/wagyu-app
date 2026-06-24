@@ -87,6 +87,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
       father_id: calf.father_id || '',
       notes: calf.notes || '',
       namlits_ownership: calf.namlits_ownership || 'Kalahari Wagyu',
+      sold_date: calf.sold_date || '',
     })
   }
 
@@ -104,6 +105,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
       mother_id: editForm.mother_id || null, father_id: editForm.father_id || null,
       notes: editForm.notes || null,
       namlits_ownership: editForm.namlits_ownership || 'Kalahari Wagyu',
+      sold_date: editForm.sold_date || null,
     }).eq('id', calf.id)
     setEditSaving(false)
     if (error) { setEditError(error.message); return }
@@ -112,7 +114,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
   }
 
   function exportCSV() {
-    const headers = ['ear_tag','identity_number','owner','breed','birth_date','color','sex','calf_details','birth_mass','mother_id','father_id','namlits_ownership','notes']
+    const headers = ['ear_tag','identity_number','owner','breed','birth_date','color','sex','calf_details','birth_mass','mother_id','father_id','namlits_ownership','notes','sold_date']
     const rows = calves.map(r => headers.map(h => { const v = r[h] ?? ''; const s = String(v); return s.includes(',') ? '"' + s + '"' : s }).join(','))
     const csv = [headers.join(','), ...rows].join(String.fromCharCode(10))
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -269,6 +271,10 @@ export default function CalfRegistration({ search, onSearchChange }) {
             <label>Father ID</label>
             <input value={f.father_id} onChange={(e) => set('father_id', e.target.value)} placeholder="Ear tag or identity no." />
           </div>
+          <div style={{ gridColumn: 'span 3' }}>
+            <label>Sold / transferred date</label>
+            <input type="date" value={f.sold_date || ''} onChange={(e) => set('sold_date', e.target.value)} />
+          </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label>Notes</label>
             <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical' }} />
@@ -304,7 +310,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
             </div>
           </div>
           <div className="row" style={{ gap: 6, flexShrink: 0 }}>
-            {calf.sold_flag && <span className="badge neutral">Sold/Transferred</span>}
+            {calf.sold_flag && <span className="badge neutral">Sold/Transferred{calf.sold_date ? ` · ${formatDate(calf.sold_date)}` : ''}</span>}
             <button style={{ fontSize: 12 }} onClick={() => startEdit(calf)}>Edit</button>
             <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteCalf(calf.id)}>Delete</button>
           </div>
