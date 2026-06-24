@@ -3,7 +3,7 @@ import { supabase, OWNERS, NAMLITS_OWNERS } from '../lib/supabase'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
-const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '', namlits_ownership: 'Kalahari Wagyu' }
+const emptyBreeding = { owner: '', identity_number: '', ear_tag: '', sex: '', date_of_birth: '', breed: 'Wagyu', mother_id: '', father_id: '', namlits_ownership: 'Kalahari Wagyu', purchase_date: '' }
 const emptyTransfer = { type: '', date: '', customer: '', invoice_number: '', breed: 'Wagyu', sex: '', date_of_birth: '' }
 
 function sortRecords(records) {
@@ -105,6 +105,9 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
       owner: record.owner || '', identity_number: record.identity_number || '',
       ear_tag: record.ear_tag || '', sex: record.sex || '',
       date_of_birth: record.date_of_birth || '', breed: record.breed || 'Wagyu',
+      mother_id: record.mother_id || '', father_id: record.father_id || '',
+      namlits_ownership: record.namlits_ownership || 'Kalahari Wagyu',
+      purchase_date: record.purchase_date || '',
     })
   }
 
@@ -116,7 +119,10 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
       updates.date_of_birth = editForm.date_of_birth || null
       updates.mother_id = editForm.mother_id || null
       updates.father_id = editForm.father_id || null
+      updates.namlits_ownership = editForm.namlits_ownership || 'Kalahari Wagyu'
+      updates.purchase_date = editForm.purchase_date || null
     }
+    updates.namlits_ownership = editForm.namlits_ownership || 'Kalahari Wagyu'
     const { error } = await supabase.from('cattle_register').update(updates).eq('id', record.id)
     if (!error) { setEditingId(null); load() }
   }
@@ -206,6 +212,8 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
           <td><select value={editForm.sex} onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value }))}><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option></select></td>
           <td><input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></td>
           <td><select value={editForm.breed} onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></td>
+          <td><select value={editForm.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => setEditForm((f) => ({ ...f, namlits_ownership: e.target.value }))}>{NAMLITS_OWNERS.map(o => <option key={o} value={o}>{o}</option>)}</select></td>
+          <td><input type="date" value={editForm.purchase_date || ''} onChange={(e) => setEditForm((f) => ({ ...f, purchase_date: e.target.value }))} /></td>
         </>}
         <td style={{ textAlign: 'right' }}>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
@@ -363,7 +371,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
-                          <td><span className="muted" style={{ fontSize: 11 }}>{namlitsMap[c.ear_tag] || '—'}</span></td>
+                          <td><span className="muted" style={{ fontSize: 11 }}>{c.namlits_ownership || namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
@@ -406,7 +414,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
-                          <td><span className="muted" style={{ fontSize: 11 }}>{namlitsMap[c.ear_tag] || '—'}</span></td>
+                          <td><span className="muted" style={{ fontSize: 11 }}>{c.namlits_ownership || namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
