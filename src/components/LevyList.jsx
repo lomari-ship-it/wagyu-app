@@ -17,19 +17,19 @@ function getCurrentFY() {
   return now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
 }
 
-function animalsForYear(calves, breedingAnimals, fyStartYear) {
-  const cutoff = fyStartDate(fyStartYear)
+function animalsForYear(calves, breedingAnimals, fyStartYear, currentFY) {
+  const fyEnd = `${fyStartYear + 1}-06-30`
   const includeKW = fyStartYear >= 2026
+  const isCurrentYear = fyStartYear >= currentFY
   const fyCalves = calves.filter(c => {
-    if (!c.birth_date || c.birth_date >= cutoff) return false
-    if (fyStartYear === 2023) {
-      const id = (c.identity_number || '').toUpperCase()
-      return id.includes('ISA')
-    }
+    if (!c.birth_date || c.birth_date > fyEnd) return false
+    if (fyStartYear === 2023) { const id=(c.identity_number||'').toUpperCase(); return id.includes('ISA') }
     const id = (c.identity_number || '').toUpperCase()
-    return id.includes('ISA') || (includeKW && id.includes('KW'))
+    if (!id.includes('ISA') && !(includeKW && id.includes('KW'))) return false
+    if (isCurrentYear && c.sold_flag) return false
+    return true
   })
-  const fyBreeding = breedingAnimals.filter(b => b.purchase_date && b.purchase_date < cutoff)
+  const fyBreeding = breedingAnimals.filter(b => b.purchase_date && b.purchase_date <= fyEnd)
   return { calves: fyCalves, breeding: fyBreeding, total: fyCalves.length + fyBreeding.length }
 }
 
@@ -125,7 +125,7 @@ export default function LevyList({ search = '', onSearchChange }) {
 
       {fyYears.map(fyYear => {
         const label = fyLabel(fyYear)
-        const { calves: fyCalves, breeding: fyBreeding, total } = animalsForYear(calves, breedingAnimals, fyYear)
+        const { calves: fyCalves, breeding: fyBreeding, total } = animalsForYear(calves, breedingAnimals, fyYear, currentFY)
         const open = openYears[label] === true
         const q = (search || '').toLowerCase()
         const filteredCalves = q ? fyCalves.filter(c => (c.ear_tag||'').toLowerCase().includes(q) || (c.identity_number||'').toLowerCase().includes(q) || (c.owner||'').toLowerCase().includes(q)) : fyCalves
