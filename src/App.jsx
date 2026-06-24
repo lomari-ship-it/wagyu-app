@@ -23,8 +23,8 @@ const TABS = [
   { id: 'reconciliation', label: 'Reconciliation by Owner' },
   { id: 'levy', label: 'Levy List' },
   { id: 'nws', label: 'Namibian Wagyu Society' },
-  { id: 'namlits', label: 'Namlits' },
   { id: 'nsba', label: 'NSBA' },
+  { id: 'namlits', label: 'Namlits' },
 ]
 
 export default function App() {
