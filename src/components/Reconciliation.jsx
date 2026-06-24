@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import ScrollTable from './ScrollTable'
 
 function fmtDate(d) { if (!d) return '—'; const [y,m,day]=d.split('-'); return `${day}/${m}/${y}`; }
 
@@ -169,8 +170,8 @@ function InvoiceReconciliation({ search = '' }) {
       <div>
         <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 500 }}>NSBA Invoices</h2>
         <p className="muted" style={{ marginBottom: 12 }}>Pulled automatically from batch records.</p>
-        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-          <table>
+        <div className="card" style={{ padding: 0 }}>
+          <ScrollTable><table>
             <thead>
               <tr>
                 <th>Owner(s)</th>
@@ -238,15 +239,15 @@ function InvoiceReconciliation({ search = '' }) {
                 <td colSpan={2}></td>
               </tr>
             </tfoot>
-          </table>
+          </table></ScrollTable>
         </div>
       </div>
 
       <div>
         <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 500 }}>Per owner summary</h2>
         <p className="muted" style={{ marginBottom: 12 }}>Total DNA tests and cost allocated per owner across all batches.</p>
-        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-          <table>
+        <div className="card" style={{ padding: 0 }}>
+          <ScrollTable><table>
             <thead>
               <tr>
                 <th>Owner</th>
@@ -270,7 +271,7 @@ function InvoiceReconciliation({ search = '' }) {
                 <td style={{ textAlign: 'right' }}>{fmt(Object.values(ownerTotals).reduce((s, d) => s + d.amount, 0))}</td>
               </tr>
             </tfoot>
-          </table>
+          </table></ScrollTable>
         </div>
       </div>
     </div>
