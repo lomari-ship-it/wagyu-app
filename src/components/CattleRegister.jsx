@@ -111,7 +111,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     })
   }
 
-  async function saveEdit(record) {
+  async function saveEdit(record, afterSave = null) {
     const updates = { owner: editForm.owner, ear_tag: editForm.ear_tag, identity_number: editForm.identity_number || null }
     if (record.animal_type === 'breeding') {
       updates.breed = editForm.breed || null
@@ -216,10 +216,26 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
           <td><input type="date" value={editForm.purchase_date || ''} onChange={(e) => setEditForm((f) => ({ ...f, purchase_date: e.target.value }))} /></td>
         </>}
         <td style={{ textAlign: 'right' }}>
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button className="primary" onClick={() => saveEdit(record)}>Save</button>
-            <button onClick={() => setEditingId(null)}>Cancel</button>
-          </div>
+          {isBreeding && (() => {
+            const idx = breeding.findIndex(r => r.id === record.id)
+            const prev = breeding[idx - 1]
+            const next = breeding[idx + 1]
+            return (
+              <div className="row" style={{ justifyContent: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                {prev && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEdit(prev))}>← Prev</button>}
+                <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap', alignSelf: 'center' }}>{idx + 1} / {breeding.length}</span>
+                {next && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEdit(next))}>Next →</button>}
+                <button className="primary" style={{ fontSize: 12 }} onClick={() => saveEdit(record)}>Save</button>
+                <button style={{ fontSize: 12 }} onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            )
+          })()}
+          {!isBreeding && (
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+              <button className="primary" onClick={() => saveEdit(record)}>Save</button>
+              <button onClick={() => setEditingId(null)}>Cancel</button>
+            </div>
+          )}
         </td>
       </tr>
     )
