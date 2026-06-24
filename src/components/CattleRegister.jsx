@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, OWNERS, NAMLITS_OWNERS } from '../lib/supabase'
+import ScrollTable from './ScrollTable'
 
 function formatDate(d) { if (!d) return '—'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
 
@@ -370,7 +371,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
               </div>
             </form>
             {loading ? <p className="muted">Loading...</p> : breeding.length === 0 ? <p className="muted">No breeding animals registered yet.</p> : (
-              <div style={{ overflowX: 'auto' }}>
+              <ScrollTable>
                 <table>
                   <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother</th><th>Father</th><th>Namlits</th><th></th></tr></thead>
                   <tbody>
@@ -401,7 +402,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                   </tbody>
                   <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={9}>Total breeding animals</td><td style={{ textAlign: 'right' }}>{breeding.length}</td></tr></tfoot>
                 </table>
-              </div>
+              </ScrollTable>
             )}
           </>
         )}
@@ -413,12 +414,11 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
         {generalOpen && (
           <>
             {loading ? null : general.length === 0 ? <p className="muted">No general cattle records yet.</p> : (
-              <div style={{ overflowX: 'auto' }}>
+              <ScrollTable>
                 <table>
                   <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th>Namlits</th><th></th></tr></thead>
                   <tbody>
                     {general.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
-                      if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={false} />
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
                       return (
                         <tr key={c.id}>
@@ -433,7 +433,6 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td><span className="muted" style={{ fontSize: 11 }}>{c.namlits_ownership || namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-                              <button style={{ fontSize: 12 }} onClick={() => startEdit(c)}>Edit</button>
                               <button style={{ fontSize: 12 }} onClick={() => startTransfer(c)}>Transfer</button>
                               <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteRecord(c.id)}>Delete</button>
                             </div>
@@ -444,7 +443,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                   </tbody>
                   <tfoot><tr style={{ fontWeight: 500, borderTop: '2px solid var(--color-border)' }}><td colSpan={9}>Total cattle</td><td style={{ textAlign: 'right' }}>{general.length}</td></tr></tfoot>
                 </table>
-              </div>
+              </ScrollTable>
             )}
           </>
         )}
@@ -455,7 +454,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
         <SectionHeader title="Transferred / sold" count={archived.length} open={archivedOpen} onToggle={() => setArchivedOpen((v) => !v)} />
         {archivedOpen && (
           archived.length === 0 ? <p className="muted">No transferred animals yet.</p> : (
-            <div style={{ overflowX: 'auto' }}>
+            <ScrollTable>
               <table>
                 <thead>
                   <tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Status</th><th>Type</th><th>Date</th><th>Customer</th><th>Invoice no.</th><th></th></tr>
@@ -496,7 +495,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </ScrollTable>
           )
         )}
       </div>
