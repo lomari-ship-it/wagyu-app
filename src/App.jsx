@@ -88,6 +88,10 @@ export default function App() {
         {tab === 'namlits' && <Namlits />}
         {tab === 'nsba' && <NSBA />}
       </main>
+      <div style={{ position: 'fixed', bottom: 24, right: 20, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 999 }}>
+        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ fontSize: 14, padding: '6px 10px', borderRadius: 6, opacity: 0.8 }} title="Scroll to top">↑</button>
+        <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} style={{ fontSize: 14, padding: '6px 10px', borderRadius: 6, opacity: 0.8 }} title="Scroll to bottom">↓</button>
+      </div>
     </div>
   )
 }
