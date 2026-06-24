@@ -400,7 +400,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
       )}
 
       {/* All transferred */}
-      <CollapsibleCard title="All cattle transferred to Kitai" count={allCattleToShow.length} countLabel="animal" defaultOpen={true}>
+      <CollapsibleCard title="All cattle transferred to Kitai" count={allCattleToShow.length} countLabel="animal" defaultOpen={false}>
         {allCattleToShow.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No cattle transferred to Kitai yet.</p> : (
           <>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, marginBottom: 8 }}>
@@ -624,7 +624,7 @@ function DnaTab({ transfers, batches, calves, getDnaCost, getDnaCostByEarTag, al
 
       {/* Not yet tracked */}
       {(eligibleCalves.length > 0 || eligibleCattle.length > 0) && (
-        <CollapsibleCard title="Animals transferred to Kitai — not yet tracked" count={eligibleCalves.length + eligibleCattle.length} countLabel="animal" defaultOpen={true}>
+        <CollapsibleCard title="Animals transferred to Kitai — not yet tracked" count={eligibleCalves.length + eligibleCattle.length} countLabel="animal" defaultOpen={false}>
           <div className="stack" style={{ gap: 6, marginTop: 12 }}>
             {eligibleCalves.map(c => (
               <div key={c.id} className="row" style={{ justifyContent: 'space-between', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8 }}>
