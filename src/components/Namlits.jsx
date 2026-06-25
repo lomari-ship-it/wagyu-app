@@ -86,6 +86,7 @@ export default function Namlits() {
       .channel('namlits-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calves' }, loadData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kitai_transfers' }, loadData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cattle_register' }, loadData)
       .subscribe()
     return () => supabase.removeChannel(sub)
   }, [])
