@@ -179,7 +179,7 @@ export default function LateRegistrations({ search: parentSearch = '', onSearchC
 
         {/* Per owner breakdown */}
         {Object.keys(byOwner).length > 0 && (
-          <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+          <ScrollTable>
             <table>
               <thead>
                 <tr><th>Owner</th><th style={{ textAlign: 'right' }}>Late (91–180d)</th><th style={{ textAlign: 'right' }}>Very late (181d+)</th><th style={{ textAlign: 'right' }}>Total</th></tr>
@@ -195,7 +195,7 @@ export default function LateRegistrations({ search: parentSearch = '', onSearchC
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollTable>
         )}
 
         {lateCalves.length === 0 && <p className="muted">No late registrations found across submitted batches.</p>}
