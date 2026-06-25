@@ -76,8 +76,8 @@ export default function NamibianWagyuSociety() {
     const [{ data: mData }, { data: cData }, { data: calvesData }, { data: bData }] = await Promise.all([
       supabase.from('society_memberships').select('*').eq('society', 'NWS').order('membership_year'),
       supabase.from('society_herd_fees').select('*').eq('society', 'NWS').order('membership_year'),
-      supabase.from('calves').select('id,owner,identity_number,birth_date'),
-      supabase.from('cattle_register').select('id,owner,purchase_date').eq('animal_type', 'breeding'),
+      supabase.from('calves').select('id,owner,identity_number,ear_tag,birth_date'),
+      supabase.from('cattle_register').select('id,owner,ear_tag,identity_number,purchase_date').eq('animal_type', 'breeding'),
     ])
     setMemberships(mData || []); setCapitaFees(cData || []); setCalves(calvesData || []); setBreedingAnimals(bData || []); setLoading(false)
   }
@@ -87,7 +87,25 @@ export default function NamibianWagyuSociety() {
     const ob = breedingAnimals.filter(b => b.owner === owner && b.purchase_date && b.purchase_date < cutoff).length
     return oc + ob
   }
+  function getOwnerCattleList(owner, fyStartYear) {
+    const cutoff = fyStartDate(fyStartYear); const includeKW = fyStartYear >= 2026
+    const c = calves.filter(c => { if (c.owner !== owner || !c.birth_date || c.birth_date < '2023-07-01' || c.birth_date >= cutoff) return false; const id = (c.identity_number || '').toUpperCase(); return id.includes('ISA') || (includeKW && id.includes('KW')) })
+    const b = breedingAnimals.filter(b => b.owner === owner && b.purchase_date && b.purchase_date < cutoff)
+    return { calves: c, breeding: b }
+  }
   function totalCapitaCount(fyStartYear) { return OWNERS.reduce((s, o) => s + calcOwnerCapita(o, fyStartYear), 0) || 1 }
+  function calcNwsTieredAmount(headCount) {
+    if (!headCount || headCount <= 0) return 0
+    let amt = 0
+    const tiers = [{ max: 100, rate: 100 }, { max: 200, rate: 40 }, { max: 300, rate: 30 }, { max: 500, rate: 20 }]
+    let remaining = headCount; let prev = 0
+    for (const tier of tiers) {
+      if (remaining <= 0) break
+      const inTier = Math.min(remaining, tier.max - prev)
+      amt += inTier * tier.rate; remaining -= inTier; prev = tier.max
+    }
+    return amt
+  }
   const totalM = memberships.reduce((s, m) => s + (Number(m.amount) || 0), 0)
   const totalC = capitaFees.reduce((s, c) => s + (Number(c.invoiced_amount) || 0), 0)
   function ownerCapitaTotal(owner) { return capitaFees.reduce((sum, cf) => { const fy = parseInt(cf.membership_year); const oc = calcOwnerCapita(owner, fy); const tc = totalCapitaCount(fy); return sum + (Number(cf.invoiced_amount) || 0) * (oc / tc) }, 0) }
@@ -195,8 +213,30 @@ export default function NamibianWagyuSociety() {
                 </div>
                 <InvoiceFile id={r.id} table="society_herd_fees" fileUrl={r.file_url} fileName={r.file_name} onUpdate={loadAll} />
               </div>))}
-              <div style={{ marginTop:12,padding:'12px 0',borderTop:'2px solid var(--color-border)',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8 }}>
-                {OWNERS.map(o=>{ const oc=calcOwnerCapita(o,fy); const tc=totalCapitaCount(fy); const amt=total*(oc/tc); return (<div key={o} style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:10 }}><div className="muted" style={{ fontSize:11,marginBottom:2 }}>{o}</div><div style={{ fontWeight:500 }}>{fmtAmt(amt)}</div><div className="muted" style={{ fontSize:11 }}>{oc} head</div></div>) })}
+              <div style={{ marginTop:12,padding:'12px 0',borderTop:'2px solid var(--color-border)' }}>
+                <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12 }}>
+                  {OWNERS.map(o=>{ const oc=calcOwnerCapita(o,fy); const tc=totalCapitaCount(fy); const amt=total*(oc/tc); const tiered=calcNwsTieredAmount(oc); return (<div key={o} style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:10 }}><div className="muted" style={{ fontSize:11,marginBottom:2 }}>{o}</div><div style={{ fontWeight:500 }}>{fmtAmt(amt)}</div><div className="muted" style={{ fontSize:11 }}>{oc} head · Our calc: {fmtAmt(tiered)}</div></div>) })}
+                </div>
+                <details style={{ marginTop:8 }}>
+                  <summary style={{ cursor:'pointer', fontSize:13, color:'var(--color-text-muted)', userSelect:'none' }}>Show cattle counted ({totalCapitaCount(fy)} total)</summary>
+                  <div style={{ marginTop:10, display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:12 }}>
+                    {OWNERS.map(o => {
+                      const { calves: oc, breeding: ob } = getOwnerCattleList(o, fy)
+                      if (!oc.length && !ob.length) return null
+                      return (<div key={o} style={{ border:'1px solid var(--color-border)', borderRadius:6, padding:10 }}>
+                        <div style={{ fontWeight:500, fontSize:13, marginBottom:6 }}>{o} — {oc.length + ob.length} head</div>
+                        {oc.length > 0 && <><div className="muted" style={{ fontSize:11, marginBottom:4 }}>Registered calves ({oc.length})</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 8px', fontSize:12 }}>
+                          {oc.map(c => <span key={c.id}>{c.identity_number || c.ear_tag || c.id}</span>)}
+                        </div></>}
+                        {ob.length > 0 && <><div className="muted" style={{ fontSize:11, margin:'8px 0 4px' }}>Purchased breeding ({ob.length})</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 8px', fontSize:12 }}>
+                          {ob.map(b => <span key={b.id}>{b.ear_tag || b.identity_number || b.id}</span>)}
+                        </div></>}
+                      </div>)
+                    })}
+                  </div>
+                </details>
               </div></div>)}
             </div>)
           })}
