@@ -12,6 +12,7 @@ import LevyList from './components/LevyList'
 import NSBA from './components/NSBA'
 import NamibianWagyuSociety from './components/NamibianWagyuSociety'
 import Namlits from './components/Namlits'
+import Reports from './components/Reports'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -20,10 +21,11 @@ const TABS = [
   { id: 'batches', label: 'Birth Notifications and DNA Testing' },
   { id: 'late', label: 'Late Registrations' },
   { id: 'levy', label: 'Levy List' },
-  { id: 'reconciliation', label: 'Reconciliation by Owner' },
   { id: 'kitai', label: 'Kitai' },
   { id: 'nws', label: 'Namibian Wagyu Society' },
   { id: 'nsba', label: 'NSBA' },
+  { id: 'reports', label: 'Reports' },
+  { id: 'reconciliation', label: 'Reconciliation by Owner' },
   { id: 'namlits', label: 'Namlits' },
 ]
 
@@ -82,11 +84,12 @@ export default function App() {
         {tab === 'batches' && <Batches search={search} onSearchChange={setSearch} />}
         {tab === 'late' && <LateRegistrations search={search} onSearchChange={setSearch} />}
         {tab === 'kitai' && <KitaiTransfers search={search} onSearchChange={setSearch} />}
-        {tab === 'reconciliation' && <Reconciliation search={search} onSearchChange={setSearch} />}
         {tab === 'levy' && <LevyList search={search} onSearchChange={setSearch} />}
         {tab === 'nws' && <NamibianWagyuSociety />}
-        {tab === 'namlits' && <Namlits />}
         {tab === 'nsba' && <NSBA />}
+        {tab === 'reports' && <Reports />}
+        {tab === 'reconciliation' && <Reconciliation search={search} onSearchChange={setSearch} />}
+        {tab === 'namlits' && <Namlits />}
       </main>
       <div style={{ position: 'fixed', bottom: 24, right: 20, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 999 }}>
         <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ fontSize: 14, padding: '6px 10px', borderRadius: 6, opacity: 0.8 }} title="Scroll to top">↑</button>
