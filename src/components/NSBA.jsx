@@ -57,15 +57,24 @@ export default function NSBA() {
       supabase.from('calves').select('id,ear_tag,identity_number,birth_date,owner,namlits_ownership'),
       supabase.from('cattle_register').select('id,ear_tag,identity_number,owner,purchase_date,namlits_ownership').eq('animal_type','breeding'),
     ])
-    setMemberships(mData || []); setHerdFees(hData || []); setCalves(cData || []); setBreedingAnimals(bData || []); setLoading(false)
+    setMemberships(mData || [])
+    setHerdFees(hData || [])
+    setCalves(cData || [])
+    setBreedingAnimals(bData || [])
+    setLoading(false)
   }
 
   function calcHerd(fyStartYear) {
     if (fyStartYear === 2023) return { count: 50, isBase: true }
-    const cutoff = fyStartDate(fyStartYear); const includeKW = fyStartYear >= 2026
-    const newCalves = calves.filter(c => { if (!c.birth_date || c.birth_date < '2023-07-01' || c.birth_date >= cutoff) return false; const id = (c.identity_number || '').toUpperCase(); return id.includes('ISA') || (includeKW && id.includes('KW')) })
+    const cutoff = fyStartDate(fyStartYear)
+    const includeKW = fyStartYear >= 2026
+    const newCalves = calves.filter(c => {
+      if (!c.birth_date || c.birth_date < '2023-07-01' || c.birth_date >= cutoff) return false
+      const id = (c.identity_number || '').toUpperCase()
+      return id.includes('ISA') || (includeKW && id.includes('KW'))
+    })
     const purchasedBreeding = breedingAnimals.filter(b => b.purchase_date && b.purchase_date < cutoff)
-    return { count: 50 + newCalves.length + purchasedBreeding.length, isBase: false, newCalves, purchasedBreeding }
+    return { count: 50 + newCalves.length + purchasedBreeding.length, isBase: false }
   }
 
   function calcOwnerHerd(owner, fyStartYear) {
@@ -85,7 +94,8 @@ export default function NSBA() {
   }
 
   const currentFY = getCurrentFY()
-  const fyYears = []; for (let y = currentFY; y >= 2023; y--) fyYears.push(y)
+  const fyYears = []
+  for (let y = currentFY; y >= 2023; y--) fyYears.push(y)
 
   const totalM = memberships.reduce((s,m) => s+(Number(m.amount)||0), 0)
   const totalH = herdFees.reduce((s,h) => s+(Number(h.invoiced_amount)||0), 0)
@@ -105,7 +115,11 @@ export default function NSBA() {
   }
   async function saveHerdFee(e) {
     e.preventDefault(); setSaving(true); setMsg('')
-    const { error } = await supabase.from('society_herd_fees').insert({ ...hForm, society:'NSBA', rate_per_head:Number(hForm.rate_per_head)||null, invoiced_count:Number(hForm.invoiced_count)||null, invoiced_amount:Number(hForm.invoiced_amount)||null, invoice_date:hForm.invoice_date||null, payment_date:hForm.payment_date||null })
+    const { error } = await supabase.from('society_herd_fees').insert({
+      ...hForm, society:'NSBA', rate_per_head:Number(hForm.rate_per_head)||null,
+      invoiced_count:Number(hForm.invoiced_count)||null, invoiced_amount:Number(hForm.invoiced_amount)||null,
+      invoice_date:hForm.invoice_date||null, payment_date:hForm.payment_date||null,
+    })
     setSaving(false); if(error){setMsg(error.message);return}
     setHForm(emptyH); setShowHForm(false); loadAll()
   }
@@ -219,7 +233,8 @@ export default function NSBA() {
             <div style={{ gridColumn:'1/-1' }}>{msg&&<p style={{ color:'var(--color-danger)',margin:'0 0 8px' }}>{msg}</p>}<button type="submit" className="primary" disabled={saving}>{saving?'Saving…':'Save invoice'}</button></div>
           </form>)}
           {fyYears.map(fyYear => {
-            const label=fyLabel(fyYear); const {count:ourCount,isBase}=calcHerd(fyYear)
+            const label=fyLabel(fyYear)
+            const {count:ourCount,isBase}=calcHerd(fyYear)
             const invoice=herdFees.find(h=>h.membership_year===label)
             const invoicedCount=invoice?Number(invoice.invoiced_count):null
             const discrepancy=invoicedCount!=null?invoicedCount-ourCount:null
