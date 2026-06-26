@@ -125,7 +125,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     }
     updates.namlits_ownership = editForm.namlits_ownership || 'Kalahari Wagyu'
     const { error } = await supabase.from('cattle_register').update(updates).eq('id', record.id)
-    if (!error) { setEditingId(null); load() }
+    if (!error) { setEditingId(null); await load(); if (afterSave) afterSave() }
   }
 
   function startTransfer(record) {
@@ -171,16 +171,11 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     load()
   }
 
-  // Summary stats
   const totalBreeding = breeding.length
   const totalGeneral = general.length
-  const totalActive = totalBreeding + totalGeneral
-  const totalTransferred = archived.length
   const totalSold = archived.filter(r => r.transfer_type === 'sold').length
   const totalPending = archived.filter(r => r.transfer_type !== 'sold').length
-  const totalAll = totalActive + totalTransferred
 
-  // Per-owner breakdown across ALL sections (breeding, general, archived)
   const ownerAll = {}
   function bumpOwner(owner, key) {
     const o = owner || 'Unknown'
@@ -285,12 +280,8 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
 
   return (
     <div className="stack" style={{ gap: 24 }}>
-
-      {/* ── Summary (non-collapsible) ── */}
       <div className="card">
         <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600 }}>Summary</h2>
-
-        {/* Stat cards */}
         <div className="row" style={{ gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
             <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Breeding animals</div>
@@ -308,13 +299,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Sold / invoiced</div>
             <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-success-text, #15803d)' }}>{totalSold}</div>
           </div>
-          <div style={{ flex: 1, minWidth: 140, border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 20px', textAlign: 'center' }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Total head</div>
-            <div style={{ fontSize: 32, fontWeight: 600, color: 'var(--color-text)' }}>{totalAll}</div>
-          </div>
         </div>
-
-        {/* Per-owner table across all sections */}
         {Object.keys(ownerAll).length > 0 && (
           <table style={{ width: '100%', fontSize: 14 }}>
             <thead>
@@ -341,18 +326,13 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             </tbody>
           </table>
         )}
-        {Object.keys(ownerAll).length === 0 && !loading && (
-          <p className="muted" style={{ margin: 0 }}>No cattle records yet.</p>
-        )}
       </div>
 
-      {/* ── Search + Sync ── */}
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ear tag or identity number..." style={{ width: '100%', maxWidth: 360 }} />
-        <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('Sync cattle register from calf registrations? This will overwrite matching fields (sex, DOB, breed, mother/father ID, identity number) wherever the calf record differs.')) syncExistingData() }}>Sync</button>
+        <button style={{ fontSize: 12 }} onClick={() => { if (window.confirm('Sync cattle register from calf registrations?')) syncExistingData() }}>Sync</button>
       </div>
 
-      {/* ── Breeding animals ── */}
       <div className="card">
         <SectionHeader title="Breeding animals" count={breeding.length} open={breedingOpen} onToggle={() => setBreedingOpen((v) => !v)} />
         {breedingOpen && (
@@ -408,7 +388,6 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
         )}
       </div>
 
-      {/* ── General cattle ── */}
       <div className="card">
         <SectionHeader title="General cattle register" count={general.length} open={generalOpen} onToggle={() => setGeneralOpen((v) => !v)} />
         {generalOpen && (
@@ -449,7 +428,6 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
         )}
       </div>
 
-      {/* ── Transferred / sold ── */}
       <div className="card">
         <SectionHeader title="Transferred / sold" count={archived.length} open={archivedOpen} onToggle={() => setArchivedOpen((v) => !v)} />
         {archivedOpen && (
@@ -475,7 +453,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                         <td style={{ textAlign: 'right' }}>
                           <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                             {!isSold
-                              ? <span className="badge warning" style={{ fontSize: 12 }} title="Becomes 'Sold' automatically when a Kitai sale invoice is created for this animal">Awaiting Kitai invoice</span>
+                              ? <span className="badge warning" style={{ fontSize: 12 }}>Awaiting Kitai invoice</span>
                               : <button style={{ fontSize: 12 }} onClick={() => markUnsold(c.id)}>Revert</button>
                             }
                             <button style={{ fontSize: 12 }} onClick={() => unarchive(c.id)}>Restore</button>
@@ -499,7 +477,6 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
           )
         )}
       </div>
-
     </div>
   )
 }
