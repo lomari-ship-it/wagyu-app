@@ -125,7 +125,29 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     }
     updates.namlits_ownership = editForm.namlits_ownership || 'Kalahari Wagyu'
     const { error } = await supabase.from('cattle_register').update(updates).eq('id', record.id)
-    if (!error) { setEditingId(null); await load(); if (afterSave) afterSave() }
+    if (!error) {
+      setEditingId(null)
+      await load()
+      if (afterSave) afterSave()
+    }
+  }
+
+  function startEditById(id) {
+    setBreeding(prev => {
+      const rec = prev.find(r => r.id === id)
+      if (rec) {
+        setEditingId(rec.id)
+        setEditForm({
+          owner: rec.owner || '', identity_number: rec.identity_number || '',
+          ear_tag: rec.ear_tag || '', sex: rec.sex || '',
+          date_of_birth: rec.date_of_birth || '', breed: rec.breed || 'Wagyu',
+          mother_id: rec.mother_id || '', father_id: rec.father_id || '',
+          namlits_ownership: rec.namlits_ownership || 'Kalahari Wagyu',
+          purchase_date: rec.purchase_date || '',
+        })
+      }
+      return prev
+    })
   }
 
   function startTransfer(record) {
@@ -218,9 +240,9 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             const next = breeding[idx + 1]
             return (
               <div className="row" style={{ justifyContent: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
-                {prev && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEdit(prev))}>← Prev</button>}
+                {prev && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEditById(prev.id))}>← Prev</button>}
                 <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap', alignSelf: 'center' }}>{idx + 1} / {breeding.length}</span>
-                {next && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEdit(next))}>Next →</button>}
+                {next && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEditById(next.id))}>Next →</button>}
                 <button className="primary" style={{ fontSize: 12 }} onClick={() => saveEdit(record)}>Save</button>
                 <button style={{ fontSize: 12 }} onClick={() => setEditingId(null)}>Cancel</button>
               </div>
