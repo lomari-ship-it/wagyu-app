@@ -306,6 +306,12 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
     })
     if (error) { alert('Failed: ' + error.message) }
     else {
+      // Mark all transfers as sold so they appear in Sales from transfers
+      if (freshTransfers && freshTransfers.length > 0) {
+        await Promise.all(freshTransfers.map(t =>
+          supabase.from('kitai_transfers').update({ sold_flag: true }).eq('id', t.id)
+        ))
+      }
       // Upload file if selected
       if (invoiceFile) {
         const { data: invData } = await supabase.from('kitai_sale_invoices').select('id').order('created_at', { ascending: false }).limit(1).single()
