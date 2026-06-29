@@ -73,6 +73,7 @@ function CattleTable({ cattle, showSoldBadge = false }) {
 
 export default function Namlits() {
   const [calves, setCalves] = useState([])
+  const [breedingAnimals, setBreedingAnimals] = useState([])
   const [soldIds, setSoldIds] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState({
@@ -93,12 +94,15 @@ export default function Namlits() {
 
   async function loadData() {
     setLoading(true)
-    const [{ data: calvesData }, { data: transfersData }] = await Promise.all([
+    const [{ data: calvesData }, { data: transfersData }, { data: breedingData }] = await Promise.all([
       supabase.from('calves').select('*').order('created_at', { ascending: false }),
       supabase.from('kitai_transfers').select('ear_tag, sold_flag').eq('sold_flag', true),
+      supabase.from('cattle_register').select('*').order('created_at', { ascending: false }),
     ])
     const allCalves = calvesData || []
+    const allBreeding = (breedingData || []).filter(b => !b.archived)
     setCalves(allCalves)
+    setBreedingAnimals(allBreeding)
     const soldEarTags = new Set((transfersData || []).map(t => t.ear_tag).filter(Boolean))
     const sold = new Set(allCalves.filter(c => c.sold_flag || soldEarTags.has(c.ear_tag)).map(c => c.id))
     setSoldIds(sold)
@@ -108,13 +112,15 @@ export default function Namlits() {
   function toggle(key) { setOpen(s => ({ ...s, [key]: !s[key] })) }
 
   const allWithFlag = calves.map(c => ({ ...c, _sold: soldIds.has(c.id) }))
-  const activeCalves = allWithFlag.filter(c => !c._sold)
+  const breedingAsEntries = breedingAnimals.map(b => ({ ...b, birth_date: b.date_of_birth, _sold: false, _isBreeding: true }))
+  const allCombined = [...allWithFlag, ...breedingAsEntries]
+  const activeCalves = allCombined.filter(c => !c._sold)
   const soldCalves = allWithFlag.filter(c => c._sold)
   const summaryRows = NAMLITS_OWNERS.map(owner => ({
     owner,
     active: activeCalves.filter(c => c.namlits_ownership === owner).length,
     sold: soldCalves.filter(c => c.namlits_ownership === owner).length,
-    total: allWithFlag.filter(c => c.namlits_ownership === owner).length,
+    total: allCombined.filter(c => c.namlits_ownership === owner).length,
   }))
 
   if (loading) return <p className="muted" style={{ padding: 24 }}>Loading...</p>
@@ -156,8 +162,8 @@ export default function Namlits() {
       </div>
 
       <div className="card" style={{ padding: 0 }}>
-        <SectionHeader title="All registered cattle" count={allWithFlag.length} open={open.all} onToggle={() => toggle('all')} />
-        {open.all && <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}><CattleTable cattle={allWithFlag} showSoldBadge /></div>}
+        <SectionHeader title="All registered cattle" count={allCombined.length} open={open.all} onToggle={() => toggle('all')} />
+        {open.all && <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--color-border)' }}><CattleTable cattle={allCombined} showSoldBadge /></div>}
       </div>
 
       {NAMLITS_OWNERS.map(owner => {
