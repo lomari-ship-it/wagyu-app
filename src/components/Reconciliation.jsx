@@ -19,7 +19,7 @@ export default function Reconciliation() {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showPayForm, setShowPayForm] = useState(false)
-  const [payForm, setPayForm] = useState({ owner: DEBTORS[0], amount: '', date: '', reference: '', notes: '', category: 'NWS+NSBA' })
+  const [payForm, setPayForm] = useState({ owner: DEBTORS[0], amount: '', date: '', reference: '', notes: '' })
   const [saving, setSaving] = useState(false)
   // Track which owner/category rows are expanded for payments
   const [expandedRows, setExpandedRows] = useState({})
@@ -100,11 +100,11 @@ export default function Reconciliation() {
     e.preventDefault(); setSaving(true)
     const { error } = await supabase.from('reconciliation_payments').insert({
       owner:payForm.owner, amount:Number(payForm.amount)||0, payment_date:payForm.date||null,
-      reference:payForm.reference||null, notes:payForm.notes||null, category:payForm.category||'NWS+NSBA',
+      reference:payForm.reference||null, notes:payForm.notes||null,
     })
     setSaving(false)
     if(error){alert('Failed: '+error.message);return}
-    setPayForm({owner:DEBTORS[0],amount:'',date:'',reference:'',notes:'',category:'NWS+NSBA'})
+    setPayForm({owner:DEBTORS[0],amount:'',date:'',reference:'',notes:''})
     setShowPayForm(false); loadAll()
   }
 
@@ -113,8 +113,13 @@ export default function Reconciliation() {
     await supabase.from('reconciliation_payments').delete().eq('id',id); loadAll()
   }
 
-  const totalSocietyInvoiced = [...nwsM,...nwsC,...nsbaM,...nsbaH].reduce((s,r)=>s+(Number(r.amount||r.invoiced_amount)||0),0)
+  async function updatePayment(id, fields) {
+    await supabase.from('reconciliation_payments').update(fields).eq('id', id); loadAll()
+  }
+
+  const totalSocietyFeesPerDebtor = DEBTORS.reduce((s,d)=>{ const sh=ownerShare(d); return s+sh.nwsMembShare+sh.nwsCapShare+sh.nsbaMembShare+sh.nsbaHerdShare+sh.lateReg },0)
   const totalPaidToJA = DEBTORS.reduce((s,d)=>s+ownerPaid(d),0)
+  const totalStillOwed = totalSocietyFeesPerDebtor - totalPaidToJA
 
   if (loading) return <p className="muted">Loading...</p>
 
@@ -122,52 +127,49 @@ export default function Reconciliation() {
     <div className="stack" style={{ gap: 16 }}>
       {/* Summary card */}
       <div className="card">
-        <h2 style={{ margin:'0 0 16px',fontSize:18,fontWeight:600 }}>Summary</h2>
-        <div className="row" style={{ gap:12,flexWrap:'wrap',marginBottom:20 }}>
-          {[
-            ['Society fees invoiced',fmtN(totalSocietyInvoiced)],
-            ['Reimbursements received',fmtN(totalPaidToJA)],
-            ['Still outstanding',fmtN(totalSocietyInvoiced/3*2-totalPaidToJA)],
-          ].map(([label,value])=>(
-            <div key={label} style={{ flex:1,minWidth:160,border:'1px solid var(--color-border)',borderRadius:10,padding:'16px 20px',textAlign:'center' }}>
-              <div className="muted" style={{ fontSize:12,marginBottom:8 }}>{label}</div>
-              <div style={{ fontSize:20,fontWeight:600 }}>{value}</div>
-            </div>
-          ))}
-        </div>
-        <p className="muted" style={{ margin:'0 0 12px',fontSize:13 }}>
-          <strong>{PAYER}</strong> pays all NWS and NSBA invoices up front and is reimbursed by the other owners.
-        </p>
-
-        {/* Per-owner balance table */}
+        <h2 style={{ margin:'0 0 4px',fontSize:18,fontWeight:600 }}>Summary</h2>
+        <p className="muted" style={{ margin:'0 0 16px',fontSize:13 }}><strong>{PAYER}</strong> pays all society invoices up front and is reimbursed by the other owners.</p>
         <ScrollTable><table style={{ width:'100%',borderCollapse:'collapse' }}>
-          <thead><tr style={{ borderBottom:'1px solid var(--color-border)' }}>
+          <thead><tr style={{ borderBottom:'2px solid var(--color-border)' }}>
             <th style={{ textAlign:'left',padding:'6px 8px 6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>Owner</th>
-            <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>NWS</th>
-            <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>NSBA</th>
+            <th style={{ textAlign:'right',padding:'6px 0',fontSize:11,textTransform:'uppercase',color:'var(--color-text-muted)' }}>NWS memb.</th>
+            <th style={{ textAlign:'right',padding:'6px 0',fontSize:11,textTransform:'uppercase',color:'var(--color-text-muted)' }}>NWS capita</th>
+            <th style={{ textAlign:'right',padding:'6px 0',fontSize:11,textTransform:'uppercase',color:'var(--color-text-muted)' }}>NSBA memb.</th>
+            <th style={{ textAlign:'right',padding:'6px 0',fontSize:11,textTransform:'uppercase',color:'var(--color-text-muted)' }}>NSBA herd</th>
+            <th style={{ textAlign:'right',padding:'6px 0',fontSize:11,textTransform:'uppercase',color:'var(--color-text-muted)' }}>Late reg.</th>
             <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>Total owed</th>
             <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>Paid</th>
-            <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>Balance</th>
+            <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>Balance due</th>
           </tr></thead>
           <tbody>{DEBTORS.map(o=>{
-            const s=ownerShare(o)
-            const paid=ownerPaid(o)
-            const bal=s.nwsMembShare+s.nwsCapShare+s.nsbaMembShare+s.nsbaHerdShare-paid
+            const s=ownerShare(o); const paid=ownerPaid(o)
+            const total=s.nwsMembShare+s.nwsCapShare+s.nsbaMembShare+s.nsbaHerdShare+s.lateReg
+            const bal=total-paid
             return(<tr key={o} style={{ borderBottom:'1px solid var(--color-border)' }}>
               <td style={{ padding:'10px 8px 10px 0' }}><strong>{o}</strong></td>
-              <td style={{ textAlign:'right',padding:'10px 0' }}>{fmtN(s.nwsMembShare+s.nwsCapShare)}</td>
-              <td style={{ textAlign:'right',padding:'10px 0' }}>{fmtN(s.nsbaMembShare+s.nsbaHerdShare)}</td>
-              <td style={{ textAlign:'right',padding:'10px 0',fontWeight:500 }}>{fmtN(s.nwsMembShare+s.nwsCapShare+s.nsbaMembShare+s.nsbaHerdShare)}</td>
-              <td style={{ textAlign:'right',padding:'10px 0',color:'var(--color-success-text,#15803d)' }}>{paid>0?fmtN(paid):'—'}</td>
-              <td style={{ textAlign:'right',padding:'10px 0',fontWeight:600,color:bal>0.01?'var(--color-warning-text,#92400e)':bal<-0.01?'var(--color-danger)':'var(--color-success-text,#15803d)' }}>
+              <td style={{ textAlign:'right',padding:'10px 0',fontSize:13 }}>{s.nwsMembShare>0?fmtN(s.nwsMembShare):'—'}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',fontSize:13 }}>{s.nwsCapShare>0?fmtN(s.nwsCapShare):'—'}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',fontSize:13 }}>{s.nsbaMembShare>0?fmtN(s.nsbaMembShare):'—'}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',fontSize:13 }}>{s.nsbaHerdShare>0?fmtN(s.nsbaHerdShare):'—'}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',fontSize:13 }}>{s.lateReg>0?fmtN(s.lateReg):'—'}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',fontWeight:600 }}>{fmtN(total)}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',color:'var(--color-success-text,#15803d)',fontWeight:500 }}>{paid>0?fmtN(paid):'—'}</td>
+              <td style={{ textAlign:'right',padding:'10px 0',fontWeight:700,color:bal>0.01?'var(--color-warning-text,#92400e)':bal<-0.01?'var(--color-danger)':'var(--color-success-text,#15803d)' }}>
                 {Math.abs(bal)<0.01?'✓ Settled':fmtN(bal)}
               </td>
             </tr>)
           })}</tbody>
+          <tfoot><tr style={{ borderTop:'2px solid var(--color-border)',fontWeight:600 }}>
+            <td style={{ padding:'8px 8px 8px 0' }}>Total</td>
+            <td colSpan={5}></td>
+            <td style={{ textAlign:'right',padding:'8px 0' }}>{fmtN(totalSocietyFeesPerDebtor)}</td>
+            <td style={{ textAlign:'right',padding:'8px 0',color:'var(--color-success-text,#15803d)' }}>{totalPaidToJA>0?fmtN(totalPaidToJA):'—'}</td>
+            <td style={{ textAlign:'right',padding:'8px 0',color:totalStillOwed>0.01?'var(--color-warning-text,#92400e)':'var(--color-success-text,#15803d)' }}>{fmtN(totalStillOwed)}</td>
+          </tr></tfoot>
         </table></ScrollTable>
       </div>
 
-      {/* Payments section */}
+            {/* Payments section */}
       <div className="card">
         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
           <h2 style={{ margin:0,fontSize:18,fontWeight:500 }}>Reimbursements to {PAYER}</h2>
@@ -178,29 +180,13 @@ export default function Reconciliation() {
             <div><label>From owner *</label><select required value={payForm.owner} onChange={e=>setPayForm(f=>({...f,owner:e.target.value}))}>{DEBTORS.map(d=><option key={d} value={d}>{d}</option>)}</select></div>
             <div><label>Amount (N$) *</label><input required type="number" step="0.01" value={payForm.amount} onChange={e=>setPayForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" /></div>
             <div><label>Payment date *</label><input required type="date" value={payForm.date} onChange={e=>setPayForm(f=>({...f,date:e.target.value}))} /></div>
-            <div><label>Category</label><select value={payForm.category} onChange={e=>setPayForm(f=>({...f,category:e.target.value}))}><option value="NWS+NSBA">NWS + NSBA (society fees)</option><option value="DNA">DNA Testing</option><option value="Late Reg">Late Registrations</option><option value="NWS">NWS only</option><option value="NSBA">NSBA only</option><option value="Other">Other</option></select></div>
             <div><label>Reference</label><input value={payForm.reference} onChange={e=>setPayForm(f=>({...f,reference:e.target.value}))} placeholder="EFT ref / cheque no." /></div>
             <div><label>Notes</label><input value={payForm.notes} onChange={e=>setPayForm(f=>({...f,notes:e.target.value}))} /></div>
             <div style={{ gridColumn:'1/-1' }}><button type="submit" className="primary" disabled={saving}>{saving?'Saving…':'Save payment'}</button></div>
           </form>
         )}
         {payments.length===0?<p className="muted">No reimbursement payments recorded yet.</p>:(
-          <ScrollTable><table style={{ width:'100%',borderCollapse:'collapse' }}>
-            <thead><tr style={{ borderBottom:'1px solid var(--color-border)' }}>
-              {['From','Date','Amount','Category','Ref','Notes',''].map(h=><th key={h} style={{ textAlign:h==='Amount'?'right':'left',padding:'6px 8px 6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>{payments.map(p=>(
-              <tr key={p.id} style={{ borderBottom:'1px solid var(--color-border)' }}>
-                <td style={{ padding:'8px 8px 8px 0' }}><strong>{p.owner}</strong></td>
-                <td style={{ padding:'8px 0' }}>{fmtDate(p.payment_date)}</td>
-                <td style={{ textAlign:'right',padding:'8px 0',color:'var(--color-success-text,#15803d)',fontWeight:500 }}>{fmtN(p.amount)}</td>
-                <td style={{ padding:'8px 0' }}><span className="badge neutral" style={{ fontSize:11 }}>{p.category||'NWS+NSBA'}</span></td>
-                <td style={{ padding:'8px 0',fontSize:12 }}>{p.reference||<span className="faint">—</span>}</td>
-                <td style={{ padding:'8px 0',fontSize:12 }}>{p.notes||<span className="faint">—</span>}</td>
-                <td style={{ padding:'8px 0' }}><button className="danger-text" style={{ fontSize:12 }} onClick={()=>deletePayment(p.id)}>Delete</button></td>
-              </tr>
-            ))}</tbody>
-          </table></ScrollTable>
+          <PaymentsTable payments={payments} onDelete={deletePayment} onUpdate={updatePayment} />
         )}
       </div>
 
@@ -253,6 +239,50 @@ function CollapsibleCard({ title, badge, children }) {
   )
 }
 
+function PaymentsTable({ payments, onDelete, onUpdate }) {
+  const [editingId, setEditingId]=useState(null)
+  const [editForm, setEditForm]=useState({})
+
+  function startEdit(p) {
+    setEditingId(p.id)
+    setEditForm({ owner:p.owner, amount:p.amount||'', date:p.payment_date||'', reference:p.reference||'', notes:p.notes||'' })
+  }
+
+  async function saveEdit(id) {
+    await onUpdate(id,{ owner:editForm.owner, amount:Number(editForm.amount)||0, payment_date:editForm.date||null, reference:editForm.reference||null, notes:editForm.notes||null })
+    setEditingId(null)
+  }
+
+  return (
+    <ScrollTable><table style={{ width:'100%',borderCollapse:'collapse' }}>
+      <thead><tr style={{ borderBottom:'1px solid var(--color-border)' }}>
+        {['From','Date','Amount','Ref','Notes',''].map(h=><th key={h} style={{ textAlign:h==='Amount'?'right':'left',padding:'6px 8px 6px 0',fontSize:12,textTransform:'uppercase',color:'var(--color-text-muted)' }}>{h}</th>)}
+      </tr></thead>
+      <tbody>{payments.map(p=>(
+        editingId===p.id ? (
+          <tr key={p.id} style={{ borderBottom:'1px solid var(--color-border)',background:'var(--color-bg-subtle)' }}>
+            <td style={{ padding:'6px 8px 6px 0' }}><select value={editForm.owner} onChange={e=>setEditForm(f=>({...f,owner:e.target.value}))} style={{ fontSize:13 }}>{DEBTORS.map(d=><option key={d} value={d}>{d}</option>)}</select></td>
+            <td style={{ padding:'6px 0' }}><input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} style={{ fontSize:13 }} /></td>
+            <td style={{ padding:'6px 0' }}><input type="number" step="0.01" value={editForm.amount} onChange={e=>setEditForm(f=>({...f,amount:e.target.value}))} style={{ fontSize:13,textAlign:'right',width:110 }} /></td>
+            <td style={{ padding:'6px 0' }}><input value={editForm.reference} onChange={e=>setEditForm(f=>({...f,reference:e.target.value}))} style={{ fontSize:13 }} /></td>
+            <td style={{ padding:'6px 0' }}><input value={editForm.notes} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))} style={{ fontSize:13 }} /></td>
+            <td style={{ padding:'6px 0' }}><div className="row" style={{ gap:4 }}><button className="primary" style={{ fontSize:11 }} onClick={()=>saveEdit(p.id)}>Save</button><button style={{ fontSize:11 }} onClick={()=>setEditingId(null)}>Cancel</button></div></td>
+          </tr>
+        ) : (
+          <tr key={p.id} style={{ borderBottom:'1px solid var(--color-border)' }}>
+            <td style={{ padding:'8px 8px 8px 0' }}><strong>{p.owner}</strong></td>
+            <td style={{ padding:'8px 0' }}>{fmtDate(p.payment_date)}</td>
+            <td style={{ textAlign:'right',padding:'8px 0',color:'var(--color-success-text,#15803d)',fontWeight:500 }}>{fmtN(p.amount)}</td>
+            <td style={{ padding:'8px 0',fontSize:12 }}>{p.reference||<span className="faint">—</span>}</td>
+            <td style={{ padding:'8px 0',fontSize:12 }}>{p.notes||<span className="faint">—</span>}</td>
+            <td style={{ padding:'8px 0' }}><div className="row" style={{ gap:4 }}><button style={{ fontSize:11 }} onClick={()=>startEdit(p)}>Edit</button><button className="danger-text" style={{ fontSize:12 }} onClick={()=>onDelete(p.id)}>Delete</button></div></td>
+          </tr>
+        )
+      ))}</tbody>
+    </table></ScrollTable>
+  )
+}
+
 function DnaSection({ batches, calves }) {
   const [expandedBatch,setExpandedBatch]=useState(null)
   const relevant=batches.filter(b=>b.invoice_number||b.batch_report_number||b.invoice_test_count||b.rate_per_test)
@@ -271,32 +301,31 @@ function DnaSection({ batches, calves }) {
     <div style={{ marginTop:12 }}>
       <ScrollTable><table style={{ width:'100%',borderCollapse:'collapse' }}>
         <thead><tr style={{ borderBottom:'1px solid var(--color-border)' }}>
-          <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Owner(s)</th>
           <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Invoice no.</th>
-          <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Batch U-no.</th>
-          <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Tests</th>
-          <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Amount</th>
-          <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Payment</th>
+          <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Batch no.</th>
+          <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Total tests</th>
+          <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Total invoice</th>
+          <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Payment date</th>
         </tr></thead>
         <tbody>{relevant.map(b=>{
           const bd=getBreakdown(b); const owners=Object.keys(bd); const multi=owners.length>1
           const total=b.invoice_amount_payable?parseFloat(b.invoice_amount_payable):((b.rate_per_test&&b.invoice_test_count)?b.rate_per_test*b.invoice_test_count:null)
           const isExp=expandedBatch===b.id
-          return (<><tr key={b.id} style={{ borderBottom:'1px solid var(--color-border)' }}>
-            <td style={{ padding:'8px 0' }}><div className="row" style={{ gap:4 }}><span>{owners.join(', ')||b.owner}</span>{multi&&<button onClick={()=>setExpandedBatch(isExp?null:b.id)} style={{ fontSize:11,padding:'1px 5px' }}>{isExp?'▲':'▼'}</button>}</div></td>
-            <td style={{ padding:'8px 0' }}>{b.invoice_number||<span className="faint">—</span>}</td>
+          return (<><tr key={b.id} style={{ borderBottom:isExp?'none':'1px solid var(--color-border)',cursor:'pointer' }} onClick={()=>setExpandedBatch(isExp?null:b.id)}>
+            <td style={{ padding:'8px 0',fontWeight:500 }}>{b.invoice_number||<span className="faint">—</span>}</td>
             <td style={{ padding:'8px 0' }}>{b.batch_report_number||<span className="faint">—</span>}</td>
             <td style={{ textAlign:'right',padding:'8px 0' }}>{b.invoice_test_count||<span className="faint">—</span>}</td>
             <td style={{ textAlign:'right',padding:'8px 0',fontWeight:500 }}>{total?fmtN(total):<span className="faint">—</span>}</td>
-            <td style={{ padding:'8px 0' }}>{b.payment_date?<span className="badge success" style={{ fontSize:11 }}>{b.payment_date.split('-').reverse().join('/')}</span>:<span className="badge warning" style={{ fontSize:11 }}>Pending</span>}</td>
+            <td style={{ padding:'8px 0' }}>{b.payment_date?<span className="badge success" style={{ fontSize:11 }}>{b.payment_date.split('-').reverse().join('/')}</span>:<span className="badge warning" style={{ fontSize:11 }}>Pending</span>}<span style={{ fontSize:11,color:'var(--color-text-muted)',marginLeft:6 }}>{isExp?'▲':'▼'}</span></td>
           </tr>
-          {isExp&&multi&&Object.entries(bd).map(([o,q])=>(
-            <tr key={o} style={{ background:'var(--color-bg-subtle)',fontSize:12 }}>
-              <td style={{ padding:'4px 0 4px 16px' }}>{o}</td><td></td><td></td>
-              <td style={{ textAlign:'right',padding:'4px 0' }}>{q}</td>
-              <td style={{ textAlign:'right',padding:'4px 0' }}>{b.rate_per_test?fmtN(q*b.rate_per_test):'—'}</td><td></td>
-            </tr>
-          ))}
+          {isExp&&(<tr style={{ borderBottom:'1px solid var(--color-border)',background:'var(--color-bg-subtle)' }}>
+            <td colSpan={5} style={{ padding:'8px 0 8px 16px' }}>
+              <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:8 }}>
+                {owners.map(o=>{const q=bd[o];const rate=b.rate_per_test||(total&&b.invoice_test_count?total/b.invoice_test_count:0);return(<div key={o} style={{ fontSize:12 }}><span style={{ fontWeight:500 }}>{o}</span><span className="muted"> — {q} tests</span>{rate>0&&<span className="muted"> = {fmtN(q*rate)}</span>}</div>)})}
+              </div>
+              {(b.additional_invoices||[]).map(ai=>(<div key={ai.id} style={{ fontSize:12,padding:'4px 0',borderTop:'1px dashed var(--color-border)',display:'flex',gap:16 }}><span className="muted">+ Supplementary</span>{ai.number&&<span>{ai.number}</span>}{ai.qty&&<span>{ai.qty} tests</span>}{ai.amount&&<span style={{ fontWeight:500 }}>{fmtN(ai.amount)}</span>}{ai.notes&&<span className="muted">{ai.notes}</span>}</div>))}
+            </td>
+          </tr>)}
           {(b.additional_invoices||[]).map(ai=>(
             <tr key={ai.id} style={{ background:'var(--color-bg-subtle)',fontSize:12 }}>
               <td style={{ padding:'4px 0 4px 16px',color:'var(--color-text-muted)' }}>+ Supplementary invoice</td>
@@ -330,16 +359,25 @@ function LateRegSection({ lateInvoices }) {
           <th style={{ textAlign:'right',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Amount</th>
           <th style={{ textAlign:'left',padding:'6px 0',fontSize:12,color:'var(--color-text-muted)' }}>Invoice</th>
         </tr></thead>
-        <tbody>{lateInvoices.map(inv=>(
-          <tr key={inv.id} style={{ borderBottom:'1px solid var(--color-border)' }}>
-            <td style={{ padding:'8px 0' }}>{inv.invoice_number||<span className="faint">—</span>}</td>
+                <tbody>{lateInvoices.map(inv=>{
+          const sums=inv.calf_summaries||[];
+          const byOwner={};
+          sums.forEach(cs=>{const o=cs.owner||'?';if(!byOwner[o])byOwner[o]={late:0,veryLate:0,amount:0};const vl=cs.days>180;byOwner[o][vl?'veryLate':'late']++;byOwner[o].amount+=(cs.rate||parseFloat(inv.rate_per_late_registration)||0)});
+          const hasOwners=Object.keys(byOwner).length>0;
+          return(<><tr key={inv.id} style={{ borderBottom:hasOwners?'none':'1px solid var(--color-border)' }}>
+            <td style={{ padding:'8px 0',fontWeight:500 }}>{inv.invoice_number||<span className="faint">—</span>}</td>
             <td style={{ padding:'8px 0' }}>{inv.invoice_date?inv.invoice_date.split('-').reverse().join('/'):<span className="faint">—</span>}</td>
             <td style={{ textAlign:'right',padding:'8px 0' }}>{inv.late_count||<span className="faint">—</span>}</td>
             <td style={{ textAlign:'right',padding:'8px 0' }}>{inv.very_late_count||<span className="faint">—</span>}</td>
             <td style={{ textAlign:'right',padding:'8px 0',fontWeight:500 }}>{fmtN(inv.amount_payable)}</td>
-            <td style={{ padding:'8px 0' }}>{inv.file_url||inv.invoice_file_url?<a href={inv.file_url||inv.invoice_file_url} target="_blank" rel="noreferrer" style={{ fontSize:12 }}>📎 View</a>:<span className="faint" style={{ fontSize:12 }}>—</span>}</td>
+            <td style={{ padding:'8px 0' }}>{inv.file_url||inv.invoice_file_url?<a href={inv.file_url||inv.invoice_file_url} target="_blank" rel="noreferrer" style={{ fontSize:12 }}>View</a>:<span className="faint" style={{ fontSize:12 }}>—</span>}</td>
           </tr>
-        ))}</tbody>
+          {hasOwners&&(<tr style={{ borderBottom:'1px solid var(--color-border)',background:'var(--color-bg-subtle)' }}>
+            <td colSpan={6} style={{ padding:'4px 0 6px 16px' }}>
+              {Object.entries(byOwner).map(([o,v])=>(<div key={o} style={{ fontSize:12,marginBottom:2 }}><span style={{ fontWeight:500 }}>{o}</span>{v.late>0&&<span className="muted"> — {v.late} late</span>}{v.veryLate>0&&<span className="muted"> + {v.veryLate} very late</span>}{v.amount>0&&<span className="muted"> = {fmtN(v.amount)}</span>}</div>))}
+            </td>
+          </tr>)}
+          </>)})}</tbody>
         <tfoot><tr style={{ fontWeight:500,borderTop:'2px solid var(--color-border)' }}>
           <td colSpan={4} style={{ padding:'8px 0' }}>Total</td>
           <td style={{ textAlign:'right',padding:'8px 0' }}>{fmtN(total)}</td><td></td>
