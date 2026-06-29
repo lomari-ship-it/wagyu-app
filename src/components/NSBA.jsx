@@ -31,6 +31,7 @@ export default function NSBA() {
   const [herdFees, setHerdFees] = useState([])
   const [calves, setCalves] = useState([])
   const [breedingAnimals, setBreedingAnimals] = useState([])
+  const [soldTransfers, setSoldTransfers] = useState([])
   const [loading, setLoading] = useState(true)
   const [membershipOpen, setMembershipOpen] = useState(false)
   const [herdOpen, setHerdOpen] = useState(false)
@@ -51,37 +52,46 @@ export default function NSBA() {
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: mData }, { data: hData }, { data: cData }, { data: bData }] = await Promise.all([
+    const [{ data: mData }, { data: hData }, { data: cData }, { data: bData }, { data: soldData }] = await Promise.all([
       supabase.from('society_memberships').select('*').eq('society', 'NSBA').order('membership_year'),
       supabase.from('society_herd_fees').select('*').eq('society', 'NSBA').order('membership_year'),
       supabase.from('calves').select('id,ear_tag,identity_number,birth_date,owner,namlits_ownership'),
-      supabase.from('cattle_register').select('id,ear_tag,identity_number,owner,purchase_date,namlits_ownership').eq('animal_type','breeding'),
+      supabase.from('cattle_register').select('id,ear_tag,identity_number,owner,purchase_date,namlits_ownership,archived').eq('animal_type','breeding'),
+      supabase.from('kitai_transfers').select('ear_tag,sold_flag').eq('sold_flag', true),
     ])
     setMemberships(mData || [])
     setHerdFees(hData || [])
     setCalves(cData || [])
     setBreedingAnimals(bData || [])
+    setSoldTransfers(soldData || [])
     setLoading(false)
   }
 
   function calcHerd(fyStartYear) {
-    if (fyStartYear === 2023) return { count: 50, isBase: true }
-    const cutoff = fyStartDate(fyStartYear)
-    const includeKW = fyStartYear >= 2026
-    const newCalves = calves.filter(c => {
-      if (!c.birth_date || c.birth_date < '2023-07-01' || c.birth_date >= cutoff) return false
+    const cutoff = fyStartDate(fyStartYear + 1)
+    const includeKW = fyStartYear >= 2025
+    const isaCalves = calves.filter(c => {
+      if (!c.birth_date || c.birth_date >= cutoff) return false
       const id = (c.identity_number || '').toUpperCase()
       return id.includes('ISA') || (includeKW && id.includes('KW'))
     })
-    const purchasedBreeding = breedingAnimals.filter(b => b.purchase_date && b.purchase_date < cutoff)
-    return { count: 50 + newCalves.length + purchasedBreeding.length, isBase: false }
+    const purchasedBreeding = breedingAnimals.filter(b => b.purchase_date && b.purchase_date < cutoff && !b.archived)
+    const soldEarTags = new Set(soldTransfers.map(t => t.ear_tag))
+    const soldCalves = isaCalves.filter(c => c.sold_flag || soldEarTags.has(c.ear_tag))
+    const count = isaCalves.length + purchasedBreeding.length - soldCalves.length
+    return { count: Math.max(0, count), isBase: false, isaCalves, purchasedBreeding, soldCalves }
   }
 
   function calcOwnerHerd(owner, fyStartYear) {
-    if (fyStartYear === 2023) return calves.filter(c => { if(c.owner!==owner) return false; const id=(c.identity_number||'').toUpperCase(); return id.includes('ISA') }).length
-    const cutoff = fyStartDate(fyStartYear); const includeKW = fyStartYear >= 2026
-    const oc = calves.filter(c => { if(c.owner!==owner||!c.birth_date||c.birth_date<'2023-07-01'||c.birth_date>=cutoff) return false; const id=(c.identity_number||'').toUpperCase(); return id.includes('ISA')||(includeKW&&id.includes('KW')) }).length
-    const ob = breedingAnimals.filter(b => b.owner===owner&&b.purchase_date&&b.purchase_date<cutoff).length
+    const cutoff = fyStartDate(fyStartYear + 1); const includeKW = fyStartYear >= 2025
+    const soldEarTags = new Set(soldTransfers.map(t => t.ear_tag))
+    const oc = calves.filter(c => {
+      if(c.owner!==owner||!c.birth_date||c.birth_date>=cutoff) return false
+      const id=(c.identity_number||'').toUpperCase()
+      if(!id.includes('ISA')&&!(includeKW&&id.includes('KW'))) return false
+      return !(c.sold_flag || soldEarTags.has(c.ear_tag))
+    }).length
+    const ob = breedingAnimals.filter(b => b.owner===owner&&b.purchase_date&&b.purchase_date<cutoff&&!b.archived).length
     return oc + ob
   }
 
@@ -234,7 +244,7 @@ export default function NSBA() {
           </form>)}
           {fyYears.map(fyYear => {
             const label=fyLabel(fyYear)
-            const {count:ourCount,isBase}=calcHerd(fyYear)
+            const {count:ourCount,isaCalves,purchasedBreeding,soldCalves}=calcHerd(fyYear)
             const invoice=herdFees.find(h=>h.membership_year===label)
             const invoicedCount=invoice?Number(invoice.invoiced_count):null
             const discrepancy=invoicedCount!=null?invoicedCount-ourCount:null
@@ -252,7 +262,7 @@ export default function NSBA() {
                 </div>
                 {open&&(<div style={{ padding:14 }}>
                   <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px 20px',marginBottom:16 }}>
-                    <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:12 }}><div className="muted" style={{ fontSize:11,marginBottom:4 }}>Our count</div><div style={{ fontSize:22,fontWeight:600 }}>{ourCount}</div>{isBase&&<div className="muted" style={{ fontSize:11 }}>Base — 50 ISA animals</div>}</div>
+                    <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:12 }}><div className="muted" style={{ fontSize:11,marginBottom:4 }}>Our count</div><div style={{ fontSize:22,fontWeight:600 }}>{ourCount}</div><div className="muted" style={{ fontSize:11 }}>{(isaCalves||[]).length} ISA/KW{purchasedBreeding?.length ? ` + ${purchasedBreeding.length} purchased` : ''}{soldCalves?.length ? ` − ${soldCalves.length} sold` : ''}</div></div>
                     <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:12 }}><div className="muted" style={{ fontSize:11,marginBottom:4 }}>NSBA invoiced</div><div style={{ fontSize:22,fontWeight:600 }}>{invoicedCount??<span className="faint">—</span>}</div></div>
                     <div style={{ background:discrepancy?'var(--color-danger-bg,#fef2f2)':'var(--color-bg-subtle)',borderRadius:6,padding:12 }}><div className="muted" style={{ fontSize:11,marginBottom:4 }}>Discrepancy</div><div style={{ fontSize:22,fontWeight:600,color:discrepancy?'var(--color-danger)':undefined }}>{discrepancy!=null?(discrepancy>0?`+${discrepancy}`:discrepancy):<span className="faint">—</span>}</div></div>
                     <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:12 }}><div className="muted" style={{ fontSize:11,marginBottom:4 }}>Rate / head</div><div style={{ fontSize:18,fontWeight:600 }}>{invoice?.rate_per_head?fmtAmt(invoice.rate_per_head):<span className="faint">—</span>}</div></div>
