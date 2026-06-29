@@ -96,51 +96,22 @@ export default function NSBA() {
   }
 
   function getOwnerHerdList(owner, fyStartYear) {
-    if (fyStartYear === 2023) { const base=calves.filter(c=>{if(c.owner!==owner)return false;const id=(c.identity_number||'').toUpperCase();return id.includes('ISA')}); return {calves:base,breeding:[]} }
-    const cutoff=fyStartDate(fyStartYear); const includeKW=fyStartYear>=2026
-    const oc=calves.filter(c=>{if(c.owner!==owner||!c.birth_date||c.birth_date<'2023-07-01'||c.birth_date>=cutoff)return false;const id=(c.identity_number||'').toUpperCase();return id.includes('ISA')||(includeKW&&id.includes('KW'))})
-    const ob=breedingAnimals.filter(b=>b.owner===owner&&b.purchase_date&&b.purchase_date<cutoff)
-    return { calves: oc, breeding: ob }
-  }
-
-  const currentFY = getCurrentFY()
-  const fyYears = []
-  for (let y = currentFY; y >= 2023; y--) fyYears.push(y)
-
-  const totalM = memberships.reduce((s,m) => s+(Number(m.amount)||0), 0)
-  const totalH = herdFees.reduce((s,h) => s+(Number(h.invoiced_amount)||0), 0)
-
-  async function saveMembership(e) {
-    e.preventDefault(); setSaving(true); setMsg('')
-    const { error } = await supabase.from('society_memberships').insert({ ...mForm, society:'NSBA', amount:Number(mForm.amount)||null, invoice_date:mForm.invoice_date||null, payment_date:mForm.payment_date||null })
-    setSaving(false); if(error){setMsg(error.message);return}
-    setMForm(emptyM); setShowMForm(false); loadAll()
-  }
-  async function updateMembership(id) {
-    setSaving(true); setMsg('')
-    const f = editMForm
-    const { error } = await supabase.from('society_memberships').update({ invoice_date:f.invoice_date||null, invoice_number:f.invoice_number, payment_date:f.payment_date||null, amount:Number(f.amount)||null, notes:f.notes||null, membership_year:f.membership_year }).eq('id',id)
-    setSaving(false); if(error){setMsg(error.message);return}
-    setEditingM(null); loadAll()
-  }
-  async function saveHerdFee(e) {
-    e.preventDefault(); setSaving(true); setMsg('')
-    const { error } = await supabase.from('society_herd_fees').insert({
-      ...hForm, society:'NSBA', rate_per_head:Number(hForm.rate_per_head)||null,
-      invoiced_count:Number(hForm.invoiced_count)||null, invoiced_amount:Number(hForm.invoiced_amount)||null,
-      invoice_date:hForm.invoice_date||null, payment_date:hForm.payment_date||null,
+    const cutoffStart = fyStartDate(fyStartYear)
+    const cutoffEnd = fyStartDate(fyStartYear + 1)
+    const includeKW = fyStartYear >= 2025
+    const soldEarTags = new Set(soldTransfers.map(t => t.ear_tag))
+    const allIsaCalves = calves.filter(c => {
+      if(c.owner!==owner||!c.birth_date||c.birth_date>=cutoffEnd) return false
+      const id=(c.identity_number||'').toUpperCase()
+      return id.includes('ISA')||(includeKW&&id.includes('KW'))
     })
-    setSaving(false); if(error){setMsg(error.message);return}
-    setHForm(emptyH); setShowHForm(false); loadAll()
+    const openingCalves = allIsaCalves.filter(c => c.birth_date < cutoffStart)
+    const bornThisFY = allIsaCalves.filter(c => c.birth_date >= cutoffStart)
+    const allPurchased = breedingAnimals.filter(b => b.owner===owner&&b.purchase_date&&b.purchase_date<cutoffEnd&&!b.archived)
+    const purchasedThisFY = allPurchased.filter(b => b.purchase_date >= cutoffStart)
+    const soldThisFY = allIsaCalves.filter(c => c.sold_flag || soldEarTags.has(c.ear_tag))
+    return { allIsaCalves, openingCalves, bornThisFY, purchasedThisFY, allPurchased, soldThisFY }
   }
-  async function updateHerdFee(id) {
-    setSaving(true); setMsg('')
-    const f = editHForm
-    const { error } = await supabase.from('society_herd_fees').update({ invoice_date:f.invoice_date||null, invoice_number:f.invoice_number, payment_date:f.payment_date||null, membership_year:f.membership_year, rate_per_head:Number(f.rate_per_head)||null, invoiced_count:Number(f.invoiced_count)||null, invoiced_amount:Number(f.invoiced_amount)||null, notes:f.notes||null }).eq('id',id)
-    setSaving(false); if(error){setMsg(error.message);return}
-    setEditingH(null); loadAll()
-  }
-
   function startEditM(r) { setEditingM(r.id); setEditMForm({ invoice_date:r.invoice_date||'', invoice_number:r.invoice_number||'', payment_date:r.payment_date||'', amount:r.amount||'', notes:r.notes||'', membership_year:r.membership_year }) }
   function startEditH(r) { setEditingH(r.id); setEditHForm({ invoice_date:r.invoice_date||'', invoice_number:r.invoice_number||'', payment_date:r.payment_date||'', rate_per_head:r.rate_per_head||'', invoiced_count:r.invoiced_count||'', invoiced_amount:r.invoiced_amount||'', notes:r.notes||'', membership_year:r.membership_year }) }
 
@@ -299,15 +270,28 @@ export default function NSBA() {
                     {OWNERS.map(o=>{ const oc=calcOwnerHerd(o,fyYear); const amt=invoice?.rate_per_head?oc*Number(invoice.rate_per_head):null; return (<div key={o} style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:10 }}><div className="muted" style={{ fontSize:11,marginBottom:2 }}>{o}</div><div style={{ fontWeight:500 }}>{amt!=null?fmtAmt(amt):<span className="faint">—</span>}</div><div className="muted" style={{ fontSize:11 }}>{oc} head</div></div>) })}
                   </div>
                   <details style={{ marginTop:8 }}>
-                    <summary style={{ cursor:'pointer',fontSize:13,color:'var(--color-text-muted)',userSelect:'none' }}>Show cattle counted ({ourCount} total)</summary>
-                    <div style={{ marginTop:10,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:12 }}>
+                    <summary style={{ cursor:'pointer',fontSize:13,color:'var(--color-text-muted)',userSelect:'none' }}>Show cattle detail per owner ({ourCount} total)</summary>
+                    <div style={{ marginTop:12 }}>
                       {OWNERS.map(o => {
-                        const {calves:oc2,breeding:ob}=getOwnerHerdList(o,fyYear)
-                        if(!oc2.length&&!ob.length) return null
-                        return (<div key={o} style={{ border:'1px solid var(--color-border)',borderRadius:6,padding:10 }}>
-                          <div style={{ fontWeight:500,fontSize:13,marginBottom:6 }}>{o} — {oc2.length+ob.length} head</div>
-                          {oc2.length>0&&<><div className="muted" style={{ fontSize:11,marginBottom:4 }}>Registered calves ({oc2.length})</div><div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 8px',fontSize:12 }}>{oc2.map(c=><span key={c.id}>{c.identity_number||c.ear_tag}</span>)}</div></>}
-                          {ob.length>0&&<><div className="muted" style={{ fontSize:11,margin:'8px 0 4px' }}>Purchased breeding ({ob.length})</div><div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 8px',fontSize:12 }}>{ob.map(b=><span key={b.id}>{b.ear_tag||b.identity_number}</span>)}</div></>}
+                        const {openingCalves,bornThisFY,purchasedThisFY,allPurchased,soldThisFY,allIsaCalves}=getOwnerHerdList(o,fyYear)
+                        const openCount=openingCalves.length+allPurchased.filter(b=>b.purchase_date<fyStartDate(fyYear)).length
+                        const closing=openCount+bornThisFY.length+purchasedThisFY.length-soldThisFY.length
+                        if(closing===0&&openCount===0) return null
+                        return (<div key={o} style={{ border:'1px solid var(--color-border)',borderRadius:8,padding:12,marginBottom:10 }}>
+                          <div style={{ fontWeight:600,fontSize:14,marginBottom:8,display:'flex',justifyContent:'space-between' }}>
+                            <span>{o}</span><span>{closing} head</span>
+                          </div>
+                          <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10,fontSize:12 }}>
+                            <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:'6px 8px' }}><div className="muted" style={{ fontSize:10 }}>At 01 Jul {fyYear}</div><div style={{ fontWeight:600,fontSize:16 }}>{openCount}</div></div>
+                            <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:'6px 8px' }}><div className="muted" style={{ fontSize:10 }}>+ Born</div><div style={{ fontWeight:600,fontSize:16,color:bornThisFY.length>0?'var(--color-success-text,#15803d)':undefined }}>{bornThisFY.length}</div></div>
+                            <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:'6px 8px' }}><div className="muted" style={{ fontSize:10 }}>+ Purchased</div><div style={{ fontWeight:600,fontSize:16,color:purchasedThisFY.length>0?'var(--color-success-text,#15803d)':undefined }}>{purchasedThisFY.length}</div></div>
+                            <div style={{ background:'var(--color-bg-subtle)',borderRadius:6,padding:'6px 8px' }}><div className="muted" style={{ fontSize:10 }}>− Sold</div><div style={{ fontWeight:600,fontSize:16,color:soldThisFY.length>0?'var(--color-danger)':undefined }}>{soldThisFY.length}</div></div>
+                          </div>
+                          <div style={{ fontSize:11,color:'var(--color-text-muted)',marginBottom:4 }}>Cattle at 30 Jun {fyYear+1}:</div>
+                          <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'2px 8px',fontSize:12 }}>
+                            {allIsaCalves.filter(c=>!c.sold_flag&&!new Set(soldTransfers.map(t=>t.ear_tag)).has(c.ear_tag)).map(c=>(<span key={c.id}>{c.identity_number||c.ear_tag}</span>))}
+                            {allPurchased.map(b=>(<span key={b.id} style={{ color:'var(--color-text-muted)' }}>{b.identity_number||b.ear_tag} (purch.)</span>))}
+                          </div>
                         </div>)
                       })}
                     </div>
