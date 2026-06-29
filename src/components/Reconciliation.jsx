@@ -164,7 +164,7 @@ export default function Reconciliation() {
               </td>
             </tr>)
           })}</tbody>
-        </ScrollTable>
+        </table></ScrollTable>
       </div>
 
       {/* Payments section */}
@@ -200,7 +200,7 @@ export default function Reconciliation() {
                 <td style={{ padding:'8px 0' }}><button className="danger-text" style={{ fontSize:12 }} onClick={()=>deletePayment(p.id)}>Delete</button></td>
               </tr>
             ))}</tbody>
-          </ScrollTable>
+          </table></ScrollTable>
         )}
       </div>
 
