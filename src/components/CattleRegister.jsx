@@ -133,21 +133,23 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
   }
 
   function startEditById(id) {
-    setBreeding(prev => {
-      const rec = prev.find(r => r.id === id)
-      if (rec) {
-        setEditingId(rec.id)
-        setEditForm({
-          owner: rec.owner || '', identity_number: rec.identity_number || '',
-          ear_tag: rec.ear_tag || '', sex: rec.sex || '',
-          date_of_birth: rec.date_of_birth || '', breed: rec.breed || 'Wagyu',
-          mother_id: rec.mother_id || '', father_id: rec.father_id || '',
-          namlits_ownership: rec.namlits_ownership || 'Kalahari Wagyu',
-          purchase_date: rec.purchase_date || '',
-        })
-      }
-      return prev
-    })
+    setTimeout(() => {
+      setBreeding(prev => {
+        const rec = prev.find(r => r.id === id)
+        if (rec) {
+          setEditingId(rec.id)
+          setEditForm({
+            owner: rec.owner || '', identity_number: rec.identity_number || '',
+            ear_tag: rec.ear_tag || '', sex: rec.sex || '',
+            date_of_birth: rec.date_of_birth || '', breed: rec.breed || 'Wagyu',
+            mother_id: rec.mother_id || '', father_id: rec.father_id || '',
+            namlits_ownership: rec.namlits_ownership || 'Kalahari Wagyu',
+            purchase_date: rec.purchase_date || '',
+          })
+        }
+        return prev
+      })
+    }, 50)
   }
 
   function startTransfer(record) {
@@ -230,6 +232,8 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
           <td><select value={editForm.sex} onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value }))}><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option></select></td>
           <td><input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></td>
           <td><select value={editForm.breed} onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></td>
+          <td><input value={editForm.mother_id || ''} onChange={(e) => setEditForm((f) => ({ ...f, mother_id: e.target.value }))} placeholder="Dam identity no." style={{ fontSize: 12 }} /></td>
+          <td><input value={editForm.father_id || ''} onChange={(e) => setEditForm((f) => ({ ...f, father_id: e.target.value }))} placeholder="Sire identity no." style={{ fontSize: 12 }} /></td>
           <td><select value={editForm.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => setEditForm((f) => ({ ...f, namlits_ownership: e.target.value }))}>{NAMLITS_OWNERS.map(o => <option key={o} value={o}>{o}</option>)}</select></td>
           <td><input type="date" value={editForm.purchase_date || ''} onChange={(e) => setEditForm((f) => ({ ...f, purchase_date: e.target.value }))} /></td>
         </>}
