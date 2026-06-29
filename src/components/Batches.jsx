@@ -759,8 +759,10 @@ function BatchCard({ batch, calves, allCalves, batchedCalfIds, onUpdate, onDelet
   const hasInvoice = batch.invoice_number || batch.invoice_date
   const isPaid = !!batch.payment_date
   const testCount = batch.invoice_test_count || 0
+  const extraTests = (batch.additional_invoices||[]).reduce((s,i)=>s+(i.qty||0),0)
+  const totalInvoicedTests = testCount + extraTests
   const calfCount = summaries.length
-  const hasDiscrepancy = testCount > 0 && calfCount > 0 && testCount !== calfCount
+  const hasDiscrepancy = totalInvoicedTests > 0 && calfCount > 0 && totalInvoicedTests !== calfCount
 
   const thisBatchCalfIds = new Set(batch.calf_ids || [])
   const editableCalves = allCalves.filter(c =>
@@ -823,8 +825,11 @@ function BatchCard({ batch, calves, allCalves, batchedCalfIds, onUpdate, onDelet
             {` · ${summaries.length} calves`}
             {hasDiscrepancy && (
               <span style={{ color: 'var(--color-danger-text)', fontSize: 12, marginLeft: 8 }}>
-                ⚠ {calfCount} calves vs {testCount} tests invoiced
+                ⚠ {calfCount} calves vs {totalInvoicedTests} tests invoiced
               </span>
+            )}
+            {!hasDiscrepancy && totalInvoicedTests > 0 && calfCount > 0 && (
+              <span style={{ color: 'var(--color-success-text,#15803d)', fontSize: 12, marginLeft: 8 }}>✓ Agrees</span>
             )}
           </div>
           <div className="row" style={{ gap: 6 }}>
