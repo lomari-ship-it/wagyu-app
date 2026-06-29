@@ -32,12 +32,14 @@ export default function LateRegistrations({ search: parentSearch = '', onSearchC
   const [calves, setCalves] = useState([])
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedCalfIds, setSelectedCalfIds] = useState(new Set())
+  const [selectedLateIds, setSelectedLateIds] = useState(new Set())
+  const [selectedVeryLateIds, setSelectedVeryLateIds] = useState(new Set())
   const [creating, setCreating] = useState(false)
   const [createMsg, setCreateMsg] = useState('')
-  const [newInvoice, setNewInvoice] = useState({ date: '', number: '', rate: '' })
+  const [newInvoice, setNewInvoice] = useState({ date: '', number: '', rateLate: '', rateVeryLate: '' })
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [invoicesOpen, setInvoicesOpen] = useState(false)
+  const [invoiceFile, setInvoiceFile] = useState(null)
   const [localSearch, setLocalSearch] = useState(parentSearch)
   const search = onSearchChange ? parentSearch : localSearch
   const setSearch = onSearchChange || setLocalSearch
@@ -90,48 +92,58 @@ export default function LateRegistrations({ search: parentSearch = '', onSearchC
     else byOwner[c.owner].late++
   })
 
-  function toggleCalf(id) {
-    setSelectedCalfIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+  function toggleCalf(id, isVeryLate) {
+    if (isVeryLate) {
+      setSelectedVeryLateIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n })
+    } else {
+      setSelectedLateIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n })
+    }
   }
 
   async function createInvoice() {
-    if (selectedCalfIds.size === 0 || !newInvoice.rate) {
-      setCreateMsg('Select at least one calf and enter a rate.')
-      return
-    }
+    const totalSel = selectedLateIds.size + selectedVeryLateIds.size
+    if (totalSel === 0) { setCreateMsg('Select at least one calf.'); return }
+    if (!newInvoice.rateLate && selectedLateIds.size > 0) { setCreateMsg('Enter a rate for Late registrations.'); return }
+    if (!newInvoice.rateVeryLate && selectedVeryLateIds.size > 0) { setCreateMsg('Enter a rate for Very Late registrations.'); return }
     setCreating(true); setCreateMsg('Creating...')
-    const selected = lateCalves.filter(c => selectedCalfIds.has(c.id))
-    const qty = selected.length
-    const rate = parseFloat(newInvoice.rate)
-    const amount = qty * rate
-
-    const byOwnerSplit = {}
-    selected.forEach(c => { byOwnerSplit[c.owner] = (byOwnerSplit[c.owner] || 0) + 1 })
-
-    const { error } = await supabase.from('late_reg_invoices').insert({
+    const BUCKET = 'batch-documents'
+    const rateLate = parseFloat(newInvoice.rateLate) || 0
+    const rateVeryLate = parseFloat(newInvoice.rateVeryLate) || 0
+    const lateSelected = lateCalves.filter(c => selectedLateIds.has(c.id))
+    const veryLateSelected = lateCalves.filter(c => selectedVeryLateIds.has(c.id))
+    const allSelected = [...lateSelected, ...veryLateSelected]
+    const amount = (lateSelected.length * rateLate) + (veryLateSelected.length * rateVeryLate)
+    const { data: inserted, error } = await supabase.from('late_reg_invoices').insert({
       invoice_date: newInvoice.date || null,
       invoice_number: newInvoice.number || null,
-      rate_per_late_registration: rate,
+      rate_per_late_registration: rateLate || rateVeryLate,
       amount_payable: amount,
-      calf_ids: Array.from(selectedCalfIds),
-      calf_summaries: selected.map(c => ({
+      calf_ids: [...selectedLateIds, ...selectedVeryLateIds],
+      calf_summaries: allSelected.map(c => ({
         id: c.id, earTag: c.ear_tag, identityNumber: c.identity_number,
-        owner: c.owner, birthDate: c.birth_date, days: c.days
+        owner: c.owner, birthDate: c.birth_date, days: c.days,
+        category: c.days > 180 ? 'very_late' : 'late',
+        rate: c.days > 180 ? rateVeryLate : rateLate,
       })),
-    })
-    if (error) { setCreateMsg('Failed: ' + error.message) }
-    else {
-      setCreateMsg('Invoice created.')
-      setSelectedCalfIds(new Set())
-      setNewInvoice({ date: '', number: '', rate: '' })
-      setShowCreateForm(false)
-      loadAll()
-      setTimeout(() => setCreateMsg(''), 2500)
+      rate_late: rateLate || null,
+      rate_very_late: rateVeryLate || null,
+      late_count: lateSelected.length,
+      very_late_count: veryLateSelected.length,
+    }).select().single()
+    if (error) { setCreateMsg('Failed: ' + error.message); setCreating(false); return }
+    if (invoiceFile && inserted) {
+      const path = `late-reg/invoice-${inserted.id}-${Date.now()}`
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, invoiceFile, { upsert: true })
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
+        await supabase.from('late_reg_invoices').update({ file_url: urlData.publicUrl, file_name: invoiceFile.name }).eq('id', inserted.id)
+      }
     }
+    setCreateMsg('Invoice created.')
+    setSelectedLateIds(new Set()); setSelectedVeryLateIds(new Set())
+    setNewInvoice({ date: '', number: '', rateLate: '', rateVeryLate: '' })
+    setInvoiceFile(null); setShowCreateForm(false)
+    loadAll(); setTimeout(() => setCreateMsg(''), 2500)
     setCreating(false)
   }
 
@@ -219,42 +231,73 @@ export default function LateRegistrations({ search: parentSearch = '', onSearchC
 
           {showCreateForm && (
             <>
-              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
+              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 12, gap: 12 }}>
                 <div><label>Invoice date</label><input type="date" value={newInvoice.date} onChange={e => setNewInvoice(f => ({ ...f, date: e.target.value }))} /></div>
                 <div><label>Invoice number</label><input style={{ width: 140 }} value={newInvoice.number} onChange={e => setNewInvoice(f => ({ ...f, number: e.target.value }))} placeholder="e.g. LB-001" /></div>
-                <div><label>Rate per late registration (N$)</label><input type="number" min="0" step="0.01" style={{ width: 140 }} value={newInvoice.rate} onChange={e => setNewInvoice(f => ({ ...f, rate: e.target.value }))} placeholder="e.g. 350.00" /></div>
-                {newInvoice.rate && selectedCalfIds.size > 0 && (
-                  <div style={{ alignSelf: 'flex-end', paddingBottom: 4 }}>
-                    <span className="muted">= {fmtCurrency(parseFloat(newInvoice.rate) * selectedCalfIds.size)} total ({selectedCalfIds.size} calves)</span>
+                <div><label>Rate — Late (91–180 days) N$</label><input type="number" min="0" step="0.01" style={{ width: 130 }} value={newInvoice.rateLate} onChange={e => setNewInvoice(f => ({ ...f, rateLate: e.target.value }))} placeholder="e.g. 350.00" /></div>
+                <div><label>Rate — Very Late (&gt;180 days) N$</label><input type="number" min="0" step="0.01" style={{ width: 130 }} value={newInvoice.rateVeryLate} onChange={e => setNewInvoice(f => ({ ...f, rateVeryLate: e.target.value }))} placeholder="e.g. 500.00" /></div>
+                <div>
+                  <label>Invoice file</label>
+                  <div className="row" style={{ gap: 6 }}>
+                    {invoiceFile
+                      ? <><span style={{ fontSize: 12 }}>📎 {invoiceFile.name}</span><button style={{ fontSize: 11 }} onClick={() => setInvoiceFile(null)}>Remove</button></>
+                      : <label style={{ cursor: 'pointer' }}><span className="button" style={{ fontSize: 12 }}>Upload PDF / image</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => setInvoiceFile(e.target.files[0] || null)} /></label>
+                    }
                   </div>
-                )}
+                </div>
               </div>
 
-              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                <span className="muted">{uninvoiced.length} uninvoiced late registrations</span>
-                <button style={{ fontSize: 13 }} onClick={() => {
-                  const allSelected = uninvoiced.every(c => selectedCalfIds.has(c.id))
-                  setSelectedCalfIds(allSelected ? new Set() : new Set(uninvoiced.map(c => c.id)))
-                }}>
-                  {uninvoiced.every(c => selectedCalfIds.has(c.id)) ? 'Deselect all' : 'Select all'}
-                </button>
-              </div>
+              {uninvoiced.filter(c => c.days <= 180).length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontWeight: 500, fontSize: 14 }}>Late (91–180 days) — {selectedLateIds.size} selected</span>
+                    <button style={{ fontSize: 12 }} onClick={() => { const u=uninvoiced.filter(c=>c.days<=180); const all=u.every(c=>selectedLateIds.has(c.id)); setSelectedLateIds(all?new Set():new Set(u.map(c=>c.id))) }}>Toggle all</button>
+                  </div>
+                  <div className="stack" style={{ gap: 4 }}>
+                    {uninvoiced.filter(c => c.days <= 180).map(c => (
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedLateIds.has(c.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
+                        <input type="checkbox" checked={selectedLateIds.has(c.id)} onChange={() => toggleCalf(c.id, false)} style={{ width: 'auto' }} />
+                        <span><strong>{c.ear_tag}</strong></span>
+                        {c.identity_number && <span className="muted">{c.identity_number}</span>}
+                        <span className="muted">{c.owner}</span>
+                        <LateTag days={c.days} />
+                        {newInvoice.rateLate && <span className="muted" style={{ fontSize: 12 }}>N$ {parseFloat(newInvoice.rateLate).toFixed(2)}</span>}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              <div className="stack" style={{ gap: 4, marginBottom: 12 }}>
-                {uninvoiced.map(c => (
-                  <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedCalfIds.has(c.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
-                    <input type="checkbox" checked={selectedCalfIds.has(c.id)} onChange={() => toggleCalf(c.id)} style={{ width: 'auto' }} />
-                    <span><strong>{c.ear_tag}</strong></span>
-                    {c.identity_number && <span className="muted">{c.identity_number}</span>}
-                    <span className="muted">{c.owner}</span>
-                    <LateTag days={c.days} />
-                  </label>
-                ))}
-              </div>
+              {uninvoiced.filter(c => c.days > 180).length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontWeight: 500, fontSize: 14 }}>Very late (&gt;180 days) — {selectedVeryLateIds.size} selected</span>
+                    <button style={{ fontSize: 12 }} onClick={() => { const u=uninvoiced.filter(c=>c.days>180); const all=u.every(c=>selectedVeryLateIds.has(c.id)); setSelectedVeryLateIds(all?new Set():new Set(u.map(c=>c.id))) }}>Toggle all</button>
+                  </div>
+                  <div className="stack" style={{ gap: 4 }}>
+                    {uninvoiced.filter(c => c.days > 180).map(c => (
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', background: selectedVeryLateIds.has(c.id) ? 'var(--color-accent-light)' : 'var(--color-surface)' }}>
+                        <input type="checkbox" checked={selectedVeryLateIds.has(c.id)} onChange={() => toggleCalf(c.id, true)} style={{ width: 'auto' }} />
+                        <span><strong>{c.ear_tag}</strong></span>
+                        {c.identity_number && <span className="muted">{c.identity_number}</span>}
+                        <span className="muted">{c.owner}</span>
+                        <LateTag days={c.days} />
+                        {newInvoice.rateVeryLate && <span className="muted" style={{ fontSize: 12 }}>N$ {parseFloat(newInvoice.rateVeryLate).toFixed(2)}</span>}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(selectedLateIds.size > 0 || selectedVeryLateIds.size > 0) && (newInvoice.rateLate || newInvoice.rateVeryLate) && (
+                <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
+                  Total: N$ {((selectedLateIds.size*(parseFloat(newInvoice.rateLate)||0))+(selectedVeryLateIds.size*(parseFloat(newInvoice.rateVeryLate)||0))).toFixed(2)} ({selectedLateIds.size+selectedVeryLateIds.size} registrations)
+                </div>
+              )}
 
               <div className="row">
-                <button className="primary" disabled={creating || selectedCalfIds.size === 0 || !newInvoice.rate} onClick={createInvoice}>
-                  Create invoice ({selectedCalfIds.size} registrations)
+                <button className="primary" disabled={creating||(selectedLateIds.size+selectedVeryLateIds.size)===0} onClick={createInvoice}>
+                  Create invoice ({selectedLateIds.size+selectedVeryLateIds.size} registrations)
                 </button>
                 <span className="muted">{createMsg}</span>
               </div>
