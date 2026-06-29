@@ -379,7 +379,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             {loading ? <p className="muted">Loading...</p> : breeding.length === 0 ? <p className="muted">No breeding animals registered yet.</p> : (
               <ScrollTable>
                 <table>
-                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother</th><th>Father</th><th>Namlits</th><th></th></tr></thead>
+                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother</th><th>Father</th><th>DNA Sample</th><th>Namlits</th><th></th></tr></thead>
                   <tbody>
                     {breeding.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (editingId === c.id) return <EditRow key={c.id} record={c} isBreeding={true} />
@@ -394,6 +394,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
+                          <td style={{ fontSize: 12 }}>{c.dna_sample_number||<span className="faint">—</span>}</td>
                           <td><span className="muted" style={{ fontSize: 11 }}>{c.namlits_ownership || namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
@@ -421,7 +422,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
             {loading ? null : general.length === 0 ? <p className="muted">No general cattle records yet.</p> : (
               <ScrollTable>
                 <table>
-                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th>Namlits</th><th></th></tr></thead>
+                  <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Sex</th><th>DOB</th><th>Breed</th><th>Mother ID</th><th>Father ID</th><th>DNA Sample</th><th>Namlits</th><th></th></tr></thead>
                   <tbody>
                     {general.filter(c => !search || (c.ear_tag||"").toLowerCase().includes(search.toLowerCase()) || (c.identity_number||"").toLowerCase().includes(search.toLowerCase())).map((c) => {
                       if (transferringId === c.id) return <TransferRow key={c.id} record={c} />
@@ -435,6 +436,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
                           <td>{(!c.breed || c.breed === 'NULL') ? <span className="faint">—</span> : c.breed}</td>
                           <td>{(!c.mother_id || c.mother_id === 'NULL') ? <span className="faint">—</span> : c.mother_id}</td>
                           <td>{(!c.father_id || c.father_id === 'NULL') ? <span className="faint">—</span> : c.father_id}</td>
+                          <td style={{ fontSize: 12 }}>{c.dna_sample_number||<span className="faint">—</span>}</td>
                           <td><span className="muted" style={{ fontSize: 11 }}>{c.namlits_ownership || namlitsMap[c.ear_tag] || '—'}</span></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
