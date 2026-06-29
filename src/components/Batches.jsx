@@ -37,7 +37,11 @@ export default function Batches({ search: parentSearch = '', onSearchChange }) {
     setLoading(false)
   }
 
-  const batchedCalfIds = new Set(batches.flatMap((b) => b.calf_ids || []))
+  const batchedCalfIds = new Set(batches.flatMap((b) => {
+    const fromIds = b.calf_ids || []
+    const fromSummaries = (b.calf_summaries || []).map(s => s.id).filter(Boolean)
+    return [...fromIds, ...fromSummaries]
+  }))
   const searchLower = calfSearch.toLowerCase()
   const filteredCalves = calves.filter((c) => !c.sold_flag && !batchedCalfIds.has(c.id) &&
     (!calfSearch || (c.ear_tag||'').toLowerCase().includes(searchLower) || (c.identity_number||'').toLowerCase().includes(searchLower))
@@ -669,6 +673,78 @@ async function reGenerateSubmission(batch, calves, onReload) {
   }
 }
 
+function AdditionalInvoices({ batch, onReload }) {
+  const BUCKET = 'batch-documents'
+  const existing = Array.isArray(batch.additional_invoices) ? batch.additional_invoices : []
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ date: '', number: '', qty: '', rate: '', amount: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+
+  async function save(e) {
+    e.preventDefault(); setSaving(true)
+    const newInv = {
+      id: Date.now().toString(),
+      date: form.date||null, number: form.number||null,
+      qty: form.qty?parseInt(form.qty):null, rate: form.rate?parseFloat(form.rate):null,
+      amount: form.amount?parseFloat(form.amount):(form.qty&&form.rate?parseFloat(form.qty)*parseFloat(form.rate):null),
+      notes: form.notes||null, file_url: null, file_name: null,
+    }
+    const { error } = await supabase.from('batches').update({ additional_invoices: [...existing,newInv] }).eq('id', batch.id)
+    if (error) { alert(error.message); setSaving(false); return }
+    setSaving(false); setAdding(false); setForm({ date:'',number:'',qty:'',rate:'',amount:'',notes:'' }); onReload()
+  }
+
+  async function remove(id) {
+    if (!window.confirm('Remove this invoice?')) return
+    await supabase.from('batches').update({ additional_invoices: existing.filter(i=>i.id!==id) }).eq('id', batch.id); onReload()
+  }
+
+  async function uploadFile(invId, file) {
+    const path = `invoices/batch-${batch.id}-extra-${invId}-${Date.now()}`
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
+    if (error) { alert(error.message); return }
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+    await supabase.from('batches').update({ additional_invoices: existing.map(i=>i.id===invId?{...i,file_url:data.publicUrl,file_name:file.name}:i) }).eq('id', batch.id); onReload()
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
+      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8 }}>
+        <div className="muted" style={{ fontWeight:500,fontSize:12 }}>Supplementary invoices{existing.length>0?` (${existing.length})`:''}</div>
+        <button style={{ fontSize:12 }} onClick={()=>setAdding(v=>!v)}>{adding?'Cancel':'+ Add invoice'}</button>
+      </div>
+      {adding&&(
+        <form onSubmit={save} style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px 12px',padding:12,background:'var(--color-bg-subtle)',borderRadius:6,marginBottom:8 }}>
+          <div><label style={{ fontSize:12 }}>Date</label><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} /></div>
+          <div><label style={{ fontSize:12 }}>Invoice no.</label><input value={form.number} onChange={e=>setForm(f=>({...f,number:e.target.value}))} placeholder="e.g. INV-1235" /></div>
+          <div><label style={{ fontSize:12 }}>Tests</label><input type="number" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))} placeholder="0" /></div>
+          <div><label style={{ fontSize:12 }}>Rate (N$)</label><input type="number" step="0.01" value={form.rate} onChange={e=>setForm(f=>({...f,rate:e.target.value}))} placeholder="0.00" /></div>
+          <div><label style={{ fontSize:12 }}>Total (N$)</label><input type="number" step="0.01" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="auto" /></div>
+          <div><label style={{ fontSize:12 }}>Notes</label><input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Difference of 12 tests" /></div>
+          <div style={{ gridColumn:'1/-1' }}><button type="submit" className="primary" disabled={saving}>{saving?'Saving…':'Save invoice'}</button></div>
+        </form>
+      )}
+      {existing.map(inv=>(
+        <div key={inv.id} style={{ display:'grid',gridTemplateColumns:'1fr auto',gap:8,padding:'6px 0',borderBottom:'1px solid var(--color-border)' }}>
+          <div style={{ display:'flex',gap:14,flexWrap:'wrap',alignItems:'center',fontSize:13 }}>
+            {inv.number&&<span><span className="muted" style={{ fontSize:11 }}>Invoice: </span><strong>{inv.number}</strong></span>}
+            {inv.date&&<span className="muted" style={{ fontSize:12 }}>{inv.date.split('-').reverse().join('/')}</span>}
+            {inv.qty&&<span><span className="muted" style={{ fontSize:11 }}>Tests: </span>{inv.qty}</span>}
+            {inv.amount&&<span><span className="muted" style={{ fontSize:11 }}>N$ </span>{parseFloat(inv.amount).toFixed(2)}</span>}
+            {inv.notes&&<span className="muted" style={{ fontSize:12 }}>📝 {inv.notes}</span>}
+            {inv.file_url
+              ? <a href={inv.file_url} target="_blank" rel="noreferrer" style={{ fontSize:12 }}>📎 {inv.file_name}</a>
+              : <label style={{ cursor:'pointer',fontSize:12,color:'var(--color-accent)' }}>📎 Upload<input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e=>{if(e.target.files[0])uploadFile(inv.id,e.target.files[0])}}/></label>
+            }
+          </div>
+          <button className="danger-text" style={{ fontSize:12 }} onClick={()=>remove(inv.id)}>Remove</button>
+        </div>
+      ))}
+      {existing.length===0&&!adding&&<p className="muted" style={{ margin:0,fontSize:12 }}>No supplementary invoices yet.</p>}
+    </div>
+  )
+}
+
 function BatchCard({ batch, calves, allCalves, batchedCalfIds, onUpdate, onDelete, onReload }) {
   const [calvesOpen, setCalvesOpen] = useState(false)
   const [batchOpen, setBatchOpen] = useState(false)
@@ -859,6 +935,8 @@ function BatchCard({ batch, calves, allCalves, batchedCalfIds, onUpdate, onDelet
               </div>
             </div>
           </div>
+
+          <AdditionalInvoices batch={batch} onReload={onReload} />
 
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginBottom: 8 }}>
             <div className="muted" style={{ fontWeight: 500, marginBottom: 8, fontSize: 12 }}>Documents</div>
