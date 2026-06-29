@@ -118,22 +118,22 @@ export default function NamibianWagyuSociety() {
       supabase.from('society_memberships').select('*').eq('society', 'NWS').order('membership_year'),
       supabase.from('society_herd_fees').select('*').eq('society', 'NWS').order('membership_year'),
       supabase.from('calves').select('id,owner,identity_number,ear_tag,birth_date'),
-      supabase.from('cattle_register').select('id,owner,ear_tag,identity_number,purchase_date').eq('animal_type', 'breeding'),
+      supabase.from('cattle_register').select('id,owner,ear_tag,identity_number,purchase_date,archived').eq('animal_type', 'breeding'),
     ])
     setMemberships(mData || []); setCapitaFees(cData || []); setCalves(calvesData || []); setBreedingAnimals(bData || []); setLoading(false)
   }
 
   function calcOwnerCapita(owner, fyStartYear) {
-    const cutoff = fyStartDate(fyStartYear); const includeKW = fyStartYear >= 2026
-    const oc = calves.filter(c => { if (c.owner !== owner || !c.birth_date || c.birth_date < '2023-07-01' || c.birth_date >= cutoff) return false; const id = (c.identity_number || '').toUpperCase(); return id.includes('ISA') || (includeKW && id.includes('KW')) }).length
-    const ob = breedingAnimals.filter(b => b.owner === owner && b.purchase_date && b.purchase_date < cutoff).length
+    const cutoff = fyStartDate(fyStartYear + 1); const includeKW = fyStartYear >= 2025
+    const oc = calves.filter(c => { if (c.owner !== owner || !c.birth_date || c.birth_date >= cutoff) return false; const id = (c.identity_number || '').toUpperCase(); return id.includes('ISA') || (includeKW && id.includes('KW')) }).length
+    const ob = breedingAnimals.filter(b => b.owner === owner && b.purchase_date && b.purchase_date < cutoff && !b.archived).length
     return oc + ob
   }
 
   function getOwnerCattleList(owner, fyStartYear) {
-    const cutoff = fyStartDate(fyStartYear); const includeKW = fyStartYear >= 2026
-    const c = calves.filter(c => { if (c.owner !== owner || !c.birth_date || c.birth_date < '2023-07-01' || c.birth_date >= cutoff) return false; const id = (c.identity_number || '').toUpperCase(); return id.includes('ISA') || (includeKW && id.includes('KW')) })
-    const b = breedingAnimals.filter(b => b.owner === owner && b.purchase_date && b.purchase_date < cutoff)
+    const cutoff = fyStartDate(fyStartYear + 1); const includeKW = fyStartYear >= 2025
+    const c = calves.filter(c => { if (c.owner !== owner || !c.birth_date || c.birth_date >= cutoff) return false; const id = (c.identity_number || '').toUpperCase(); return id.includes('ISA') || (includeKW && id.includes('KW')) })
+    const b = breedingAnimals.filter(b => b.owner === owner && b.purchase_date && b.purchase_date < cutoff && !b.archived)
     return { calves: c, breeding: b }
   }
 
