@@ -115,6 +115,9 @@ export default function NSBA() {
   function startEditM(r) { setEditingM(r.id); setEditMForm({ invoice_date:r.invoice_date||'', invoice_number:r.invoice_number||'', payment_date:r.payment_date||'', amount:r.amount||'', notes:r.notes||'', membership_year:r.membership_year }) }
   function startEditH(r) { setEditingH(r.id); setEditHForm({ invoice_date:r.invoice_date||'', invoice_number:r.invoice_number||'', payment_date:r.payment_date||'', rate_per_head:r.rate_per_head||'', invoiced_count:r.invoiced_count||'', invoiced_amount:r.invoiced_amount||'', notes:r.notes||'', membership_year:r.membership_year }) }
 
+  const totalM = memberships.reduce((s, m) => s + (Number(m.amount) || 0), 0)
+  const totalH = herdFees.reduce((s, hf) => s + (Number(hf.invoiced_amount) || 0), 0)
+
   if (loading) return <p className="muted" style={{ padding: 24 }}>Loading…</p>
 
   return (
