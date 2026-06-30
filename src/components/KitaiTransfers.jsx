@@ -439,7 +439,7 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
 
           <div style={{ overflowX: 'auto' }}>
             <table>
-              <thead><tr><th></th><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Transfer date</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th></th><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>DNA Sample</th><th>Sire</th><th>Dam</th><th>Transfer date</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {allCattleToShow.map(c => {
                   const isSold = soldIds.has(c.id) || invoicedCattleIds.has(c.id)
@@ -449,6 +449,9 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
                       <td>{c.owner}</td>
                       <td>{c.identity_number || <span className="faint">—</span>}</td>
                       <td><strong>{c.ear_tag}</strong></td>
+                      <td>{c.dna_sample_number || <span className="faint">—</span>}</td>
+                      <td>{c.father_id || <span className="faint">—</span>}</td>
+                      <td>{c.mother_id || <span className="faint">—</span>}</td>
                       <td>{formatDate(c.transfer_date)}</td>
                       <td>{isSold ? <span className="badge success">Sold / invoiced</span> : <span className="badge warning">Pending sale</span>}</td>
 <td></td>
@@ -466,10 +469,10 @@ function CattleTransfersTab({ allKitaiCattle, transfers, saleInvoices, invoicedT
         {soldCattle.length === 0 ? <p className="muted" style={{ marginTop: 12 }}>No sales recorded yet.</p> : (
           <div style={{ overflowX: 'auto', marginTop: 12 }}>
             <table>
-              <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>Transfer date</th><th>Status</th></tr></thead>
+              <thead><tr><th>Owner</th><th>Identity no.</th><th>Ear tag</th><th>DNA Sample</th><th>Sire</th><th>Dam</th><th>Transfer date</th><th>Status</th></tr></thead>
               <tbody>
                 {soldCattle.map(c => (
-                  <tr key={c.id}><td>{c.owner}</td><td>{c.identity_number || <span className="faint">—</span>}</td><td><strong>{c.ear_tag}</strong></td><td>{formatDate(c.transfer_date)}</td><td><span className="badge success">Sold</span></td></tr>
+                  <tr key={c.id}><td>{c.owner}</td><td>{c.identity_number || <span className="faint">—</span>}</td><td><strong>{c.ear_tag}</strong></td><td>{c.dna_sample_number || <span className="faint">—</span>}</td><td>{c.father_id || <span className="faint">—</span>}</td><td>{c.mother_id || <span className="faint">—</span>}</td><td>{formatDate(c.transfer_date)}</td><td><span className="badge success">Sold</span></td></tr>
                 ))}
               </tbody>
             </table>
