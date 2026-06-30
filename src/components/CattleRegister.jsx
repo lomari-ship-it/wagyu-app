@@ -211,99 +211,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
   general.forEach(r => bumpOwner(r.owner, 'general'))
   archived.forEach(r => bumpOwner(r.owner, r.transfer_type === 'sold' ? 'sold' : 'pending'))
 
-  function SectionHeader({ title, count, open, onToggle }) {
-    return (
-      <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', marginBottom: open ? 12 : 0 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>{title}</h2>
-        <div className="row" style={{ gap: 12 }}>
-          <span className="muted">{count} record{count !== 1 ? 's' : ''}</span>
-          <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
-        </div>
-      </div>
-    )
-  }
-
-  function EditRow({ record, isBreeding }) {
-    return (
-      <tr style={{ background: 'var(--color-accent-light)' }}>
-        <td><select value={editForm.owner} onChange={(e) => setEditForm((f) => ({ ...f, owner: e.target.value }))}>{OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}</select></td>
-        <td><input value={editForm.identity_number} onChange={(e) => setEditForm((f) => ({ ...f, identity_number: e.target.value }))} /></td>
-        <td><input value={editForm.ear_tag} onChange={(e) => setEditForm((f) => ({ ...f, ear_tag: e.target.value }))} /></td>
-        {isBreeding && <>
-          <td><select value={editForm.sex} onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value }))}><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option></select></td>
-          <td><input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></td>
-          <td><select value={editForm.breed} onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></td>
-          <td><input value={editForm.mother_id || ''} onChange={(e) => setEditForm((f) => ({ ...f, mother_id: e.target.value }))} placeholder="Dam identity no." style={{ fontSize: 12 }} /></td>
-          <td><input value={editForm.father_id || ''} onChange={(e) => setEditForm((f) => ({ ...f, father_id: e.target.value }))} placeholder="Sire identity no." style={{ fontSize: 12 }} /></td>
-          <td><select value={editForm.namlits_ownership || 'Karahari Wagyu'} onChange={(e) => setEditForm((f) => ({ ...f, namlits_ownership: e.target.value }))}>{NAMLITS_OWNERS.map(o => <option key={o} value={o}>{o}</option>)}</select></td>
-          <td><input type="date" value={editForm.purchase_date || ''} onChange={(e) => setEditForm((f) => ({ ...f, purchase_date: e.target.value }))} /></td>
-        </>}
-        <td style={{ textAlign: 'right' }}>
-          {isBreeding && (() => {
-            const idx = breeding.findIndex(r => r.id === record.id)
-            const prev = breeding[idx - 1]
-            const next = breeding[idx + 1]
-            return (
-              <div className="row" style={{ justifyContent: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
-                {prev && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEditById(prev.id))}>← Prev</button>}
-                <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap', alignSelf: 'center' }}>{idx + 1} / {breeding.length}</span>
-                {next && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEditById(next.id))}>Next →</button>}
-                <button className="primary" style={{ fontSize: 12 }} onClick={() => saveEdit(record)}>Save</button>
-                <button style={{ fontSize: 12 }} onClick={() => setEditingId(null)}>Cancel</button>
-              </div>
-            )
-          })()}
-          {!isBreeding && (
-            <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-              <button className="primary" onClick={() => saveEdit(record)}>Save</button>
-              <button onClick={() => setEditingId(null)}>Cancel</button>
-            </div>
-          )}
-        </td>
-      </tr>
-    )
-  }
-
-  function TransferRow({ record }) {
-    const tf = transferForm
-    const set = (field, value) => setTransferForm((f) => ({ ...f, [field]: value }))
-    const colSpan = record.animal_type === 'breeding' ? 7 : 4
-    return (
-      <tr style={{ background: 'var(--color-warning-bg)' }}>
-        <td colSpan={colSpan}>
-          <div style={{ padding: '8px 0' }}>
-            <div className="muted" style={{ fontWeight: 500, marginBottom: 8 }}>Transfer: {record.identity_number || record.ear_tag}</div>
-            <div className="row" style={{ marginBottom: 10 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'breeding' ? 600 : 400 }}>
-                <input type="radio" name={`ttype-${record.id}`} value="breeding" checked={tf.type === 'breeding'} onChange={() => set('type', 'breeding')} style={{ width: 'auto' }} />
-                Move to Breeding animals
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'kitai' ? 600 : 400 }}>
-                <input type="radio" name={`ttype-${record.id}`} value="kitai" checked={tf.type === 'kitai'} onChange={() => set('type', 'kitai')} style={{ width: 'auto' }} />
-                Transferred to Kitai pending sale
-              </label>
-            </div>
-            {tf.type === 'kitai' && (
-              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
-                <div><label>Transfer date</label><input type="date" value={tf.date} onChange={(e) => set('date', e.target.value)} /></div>
-              </div>
-            )}
-            {tf.type === 'breeding' && (
-              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
-                <div><label>Sex</label><select value={tf.sex} onChange={(e) => set('sex', e.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
-                <div><label>Date of birth</label><input type="date" value={tf.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} /></div>
-                <div><label>Breed</label><select value={tf.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></div>
-              </div>
-            )}
-            <div className="row">
-              <button className="primary" disabled={!tf.type || transferSaving} onClick={() => saveTransfer(record)}>Confirm transfer</button>
-              <button onClick={() => setTransferringId(null)}>Cancel</button>
-            </div>
-          </div>
-        </td>
-      </tr>
-    )
-  }
+  
 
   return (
     <div className="stack" style={{ gap: 24 }}>
@@ -509,3 +417,97 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
     </div>
   )
 }
+
+function SectionHeader({ title, count, open, onToggle }) {
+    return (
+      <div onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', marginBottom: open ? 12 : 0 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>{title}</h2>
+        <div className="row" style={{ gap: 12 }}>
+          <span className="muted">{count} record{count !== 1 ? 's' : ''}</span>
+          <span style={{ fontSize: 18, color: 'var(--color-text-muted)', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>&#8964;</span>
+        </div>
+      </div>
+    )
+  }
+
+  function EditRow({ record, isBreeding }) {
+    return (
+      <tr style={{ background: 'var(--color-accent-light)' }}>
+        <td><select value={editForm.owner} onChange={(e) => setEditForm((f) => ({ ...f, owner: e.target.value }))}>{OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}</select></td>
+        <td><input value={editForm.identity_number} onChange={(e) => setEditForm((f) => ({ ...f, identity_number: e.target.value }))} /></td>
+        <td><input value={editForm.ear_tag} onChange={(e) => setEditForm((f) => ({ ...f, ear_tag: e.target.value }))} /></td>
+        {isBreeding && <>
+          <td><select value={editForm.sex} onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value }))}><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option></select></td>
+          <td><input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm((f) => ({ ...f, date_of_birth: e.target.value }))} /></td>
+          <td><select value={editForm.breed} onChange={(e) => setEditForm((f) => ({ ...f, breed: e.target.value }))}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></td>
+          <td><input value={editForm.mother_id || ''} onChange={(e) => setEditForm((f) => ({ ...f, mother_id: e.target.value }))} placeholder="Dam identity no." style={{ fontSize: 12 }} /></td>
+          <td><input value={editForm.father_id || ''} onChange={(e) => setEditForm((f) => ({ ...f, father_id: e.target.value }))} placeholder="Sire identity no." style={{ fontSize: 12 }} /></td>
+          <td><select value={editForm.namlits_ownership || 'Karahari Wagyu'} onChange={(e) => setEditForm((f) => ({ ...f, namlits_ownership: e.target.value }))}>{NAMLITS_OWNERS.map(o => <option key={o} value={o}>{o}</option>)}</select></td>
+          <td><input type="date" value={editForm.purchase_date || ''} onChange={(e) => setEditForm((f) => ({ ...f, purchase_date: e.target.value }))} /></td>
+        </>}
+        <td style={{ textAlign: 'right' }}>
+          {isBreeding && (() => {
+            const idx = breeding.findIndex(r => r.id === record.id)
+            const prev = breeding[idx - 1]
+            const next = breeding[idx + 1]
+            return (
+              <div className="row" style={{ justifyContent: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                {prev && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEditById(prev.id))}>← Prev</button>}
+                <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap', alignSelf: 'center' }}>{idx + 1} / {breeding.length}</span>
+                {next && <button style={{ fontSize: 12 }} onClick={() => saveEdit(record, () => startEditById(next.id))}>Next →</button>}
+                <button className="primary" style={{ fontSize: 12 }} onClick={() => saveEdit(record)}>Save</button>
+                <button style={{ fontSize: 12 }} onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            )
+          })()}
+          {!isBreeding && (
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+              <button className="primary" onClick={() => saveEdit(record)}>Save</button>
+              <button onClick={() => setEditingId(null)}>Cancel</button>
+            </div>
+          )}
+        </td>
+      </tr>
+    )
+  }
+
+  function TransferRow({ record }) {
+    const tf = transferForm
+    const set = (field, value) => setTransferForm((f) => ({ ...f, [field]: value }))
+    const colSpan = record.animal_type === 'breeding' ? 7 : 4
+    return (
+      <tr style={{ background: 'var(--color-warning-bg)' }}>
+        <td colSpan={colSpan}>
+          <div style={{ padding: '8px 0' }}>
+            <div className="muted" style={{ fontWeight: 500, marginBottom: 8 }}>Transfer: {record.identity_number || record.ear_tag}</div>
+            <div className="row" style={{ marginBottom: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'breeding' ? 600 : 400 }}>
+                <input type="radio" name={`ttype-${record.id}`} value="breeding" checked={tf.type === 'breeding'} onChange={() => set('type', 'breeding')} style={{ width: 'auto' }} />
+                Move to Breeding animals
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: tf.type === 'kitai' ? 600 : 400 }}>
+                <input type="radio" name={`ttype-${record.id}`} value="kitai" checked={tf.type === 'kitai'} onChange={() => set('type', 'kitai')} style={{ width: 'auto' }} />
+                Transferred to Kitai pending sale
+              </label>
+            </div>
+            {tf.type === 'kitai' && (
+              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+                <div><label>Transfer date</label><input type="date" value={tf.date} onChange={(e) => set('date', e.target.value)} /></div>
+              </div>
+            )}
+            {tf.type === 'breeding' && (
+              <div className="row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+                <div><label>Sex</label><select value={tf.sex} onChange={(e) => set('sex', e.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
+                <div><label>Date of birth</label><input type="date" value={tf.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} /></div>
+                <div><label>Breed</label><select value={tf.breed} onChange={(e) => set('breed', e.target.value)}><option value="">Select</option><option value="Wagyu">Wagyu</option><option value="F1">F1</option><option value="F2">F2</option><option value="Angus">Angus</option></select></div>
+              </div>
+            )}
+            <div className="row">
+              <button className="primary" disabled={!tf.type || transferSaving} onClick={() => saveTransfer(record)}>Confirm transfer</button>
+              <button onClick={() => setTransferringId(null)}>Cancel</button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    )
+  }
