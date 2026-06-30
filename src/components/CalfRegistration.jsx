@@ -14,7 +14,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
   const emptyForm = {
     owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
     color: '', sex: '', calf_details: 'Single', birth_mass: '', mother_id: '', father_id: '', notes: '',
-    namlits_ownership: 'Kalahari Wagyu',
+    namlits_ownership: 'Karahari Wagyu',
   }
   const [form, setForm] = useState(emptyForm)
   const [calves, setCalves] = useState([])
@@ -55,7 +55,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
       color: form.color, sex: form.sex || null, calf_details: form.calf_details,
       birth_mass: form.birth_mass ? Number(form.birth_mass) : null,
       mother_id: form.mother_id || null, father_id: form.father_id || null, notes: form.notes || null,
-      namlits_ownership: form.namlits_ownership || 'Kalahari Wagyu',
+      namlits_ownership: form.namlits_ownership || 'Karahari Wagyu',
     })
     setSaving(false)
     if (error) { setError(error.message); return }
@@ -86,7 +86,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
       mother_id: calf.mother_id || '',
       father_id: calf.father_id || '',
       notes: calf.notes || '',
-      namlits_ownership: calf.namlits_ownership || 'Kalahari Wagyu',
+      namlits_ownership: calf.namlits_ownership || 'Karahari Wagyu',
       sold_date: calf.sold_date || '',
     })
   }
@@ -104,7 +104,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
       birth_mass: editForm.birth_mass ? Number(editForm.birth_mass) : null,
       mother_id: editForm.mother_id || null, father_id: editForm.father_id || null,
       notes: editForm.notes || null,
-      namlits_ownership: editForm.namlits_ownership || 'Kalahari Wagyu',
+      namlits_ownership: editForm.namlits_ownership || 'Karahari Wagyu',
       sold_date: editForm.sold_date || null,
     }).eq('id', calf.id)
     setEditSaving(false)
@@ -155,7 +155,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
         birth_mass: row.birth_mass ? Number(row.birth_mass) : null,
         mother_id: row.mother_id || null, father_id: row.father_id || null,
         notes: row.notes || null,
-        namlits_ownership: row.namlits_ownership || 'Kalahari Wagyu',
+        namlits_ownership: row.namlits_ownership || 'Karahari Wagyu',
         sold_date: row.sold_date || row['sold date'] || null,
         sold_flag: !!(row.sold_date || row['sold date']),
       })
@@ -238,7 +238,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
           </div>
           <div style={{ gridColumn: 'span 2' }}>
             <label>Namlits Ownership</label>
-            <select value={f.namlits_ownership || 'Kalahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
+            <select value={f.namlits_ownership || 'Karahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
               {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
