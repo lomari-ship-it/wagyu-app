@@ -23,6 +23,8 @@ function fyLabel(y) { return `${y}/${y+1}` }
 function fyStartDate(y) { return `${y}-07-01` }
 function getCurrentFY() { const now=new Date(); return now.getMonth()>=6?now.getFullYear():now.getFullYear()-1 }
 
+const fyYears = (() => { const years=[]; for(let y=2023;y<=getCurrentFY();y++) years.push(y); return years })()
+
 const th = { textAlign:'left', padding:'6px 8px 6px 0', fontSize:12, textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--color-text-muted)' }
 const td = { padding:'8px 8px 8px 0' }
 
