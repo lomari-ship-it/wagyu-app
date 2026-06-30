@@ -60,7 +60,7 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
   async function syncExistingData() {
     const [{ data: calvesData }, { data: cattleData }] = await Promise.all([
       supabase.from('calves').select('ear_tag, identity_number, birth_date, sex, mother_id, father_id, breed'),
-      supabase.from('cattle_register').select('id, ear_tag, sex, date_of_birth, breed, mother_id, father_id, identity_number'),
+      supabase.from('cattle_register').select('id, ear_tag, sex, date_of_birth, breed, mother_id, father_id, identity_number, dna_verified'),
     ])
     if (!calvesData || !cattleData) { alert('Failed to load data for sync.'); return }
     const calfMap = {}
@@ -73,9 +73,10 @@ export default function CattleRegister({ search: parentSearch = '', onSearchChan
       if (calf.sex && calf.sex !== cattle.sex) updates.sex = calf.sex
       if (calf.birth_date && calf.birth_date !== cattle.date_of_birth) updates.date_of_birth = calf.birth_date
       if (calf.breed && calf.breed !== cattle.breed) updates.breed = calf.breed
-      if (calf.mother_id && calf.mother_id !== cattle.mother_id) updates.mother_id = calf.mother_id
-      if (calf.father_id && calf.father_id !== cattle.father_id) updates.father_id = calf.father_id
-      if (calf.identity_number && calf.identity_number !== cattle.identity_number) updates.identity_number = calf.identity_number
+      // Skip parentage/identity fields once DNA-verified (set by the Batch Detail Report import) so Sync can't overwrite lab-confirmed data with stale birth-notification values.
+      if (calf.mother_id && calf.mother_id !== cattle.mother_id && !cattle.dna_verified) updates.mother_id = calf.mother_id
+      if (calf.father_id && calf.father_id !== cattle.father_id && !cattle.dna_verified) updates.father_id = calf.father_id
+      if (calf.identity_number && calf.identity_number !== cattle.identity_number && !cattle.dna_verified) updates.identity_number = calf.identity_number
       if (Object.keys(updates).length > 0) {
         await supabase.from('cattle_register').update(updates).eq('id', cattle.id)
         updated++
