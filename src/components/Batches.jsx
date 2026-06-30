@@ -1048,96 +1048,48 @@ async function bdrEnsurePdfJs() {
   return window.pdfjsLib
 }
 
-async function bdrExtractTextWithPositions(file) {
+async function bdrExtractText(file) {
   const pdfjs = await bdrEnsurePdfJs()
   const buf = await file.arrayBuffer()
   const pdf = await pdfjs.getDocument({ data: buf }).promise
-  const allItems = []
+  let text = ''
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p)
     const content = await page.getTextContent()
-    content.items.forEach(it => {
-      if (it.str.trim()) allItems.push({ str: it.str.trim(), x: it.transform[4], y: it.transform[5], page: p })
-    })
+    text += ' ' + content.items.map(it => it.str).join(' ')
   }
-  return allItems
+  return text
 }
 
-// Group text items into rows by Y position (items within 4pts = same row)
-function groupIntoRows(items) {
-  const sorted = [...items].sort((a, b) => b.page - a.page || b.y - a.y || a.x - b.x)
-  const rows = []
-  let currentRow = []
-  let currentY = null
-  let currentPage = null
-  for (const item of sorted) {
-    if (currentPage !== item.page || currentY === null || Math.abs(item.y - currentY) > 6) {
-      if (currentRow.length) rows.push(currentRow.sort((a, b) => a.x - b.x))
-      currentRow = [item]
-      currentY = item.y
-      currentPage = item.page
-    } else {
-      currentRow.push(item)
-    }
-  }
-  if (currentRow.length) rows.push(currentRow.sort((a, b) => a.x - b.x))
-  return rows
-}
+// Parse a Unistel Batch Detail Report.
+// Each animal's row starts with a SAMPLE number like "26160U007", followed by the
+// animal's own identity number (e.g. "JWF25-2180"), then optionally a DAM identity
+// number, then a SIRE identity number — both DAM and SIRE only appear when valid.
+// Identity numbers look like: 2-4 letters, 2 digits, dash, 3-5 digits (e.g. JWF25-2180, ISA23-1122, SW22-0001).
+function parseBatchDetailReport(fullText) {
+  const samplePattern = /\d{5}U\d{3}/g
+  const identPattern = /[A-Z]{2,4}\d{2}-\d{3,5}/g
 
-// Parse Batch Detail Report rows
-// NSBA format rows look like: [No] [EarTag 8-digit] [IdentityNo 22-XXXXXX] [SampleNo] [Sire ident] [Dam ident] [Sex] [DOB]
-function parseBatchDetailReport(items) {
-  const rows = groupIntoRows(items)
+  const sampleMatches = [...fullText.matchAll(samplePattern)]
   const animals = []
-  
-  // Identity number pattern: YY-NNNNprefix (e.g. 22-1234JFW, 23-0001ISA)
-  const identPattern = /^\d{2}-\d{3,5}[A-Z]{2,4}$/
-  // Ear tag pattern: 8 consecutive digits
-  const earTagPattern = /^\d{8}$/
-  // Sample number: varies by lab — often 4-8 digits or alphanumeric like UA12345 or just a number
-  const samplePattern = /^[A-Z]{0,3}\d{4,8}$/
 
-  for (const row of rows) {
-    const texts = row.map(r => r.str)
-    // Find identity number(s) in this row
-    const identCols = texts.filter(t => identPattern.test(t))
-    const earTagCols = texts.filter(t => earTagPattern.test(t))
-    
-    // Need at least one identity number and one ear tag to be an animal row
-    if (identCols.length === 0 || earTagCols.length === 0) continue
-    
-    // The first identity number is likely this animal's
-    const animalIdent = identCols[0]
-    const earTag = earTagCols[0]
-    
-    // Look for additional identity numbers as sire/dam
-    // Sire and Dam are also identity numbers appearing after the animal's own
-    const remainingIdents = identCols.slice(1)
-    let sire = remainingIdents[0] || null
-    let dam = remainingIdents[1] || null
-    
-    // Sample number: find something that looks like a sample no.
-    // It's usually after the ear tag and before the sire/dam
-    const earTagIdx = texts.findIndex(t => t === earTag)
-    const identIdx = texts.findIndex(t => t === animalIdent)
-    // Check text between ear tag and identity for a sample-like value
-    let sampleNo = null
-    for (let i = Math.min(earTagIdx, identIdx) + 1; i < texts.length; i++) {
-      const t = texts[i]
-      if (samplePattern.test(t) && !identPattern.test(t) && !earTagPattern.test(t)) {
-        sampleNo = t
-        break
-      }
-    }
-    
-    // Also check for sex (M/F/Vroulik/Manlik)
-    const sexMap = { 'M': 'Male', 'F': 'Female', 'Manlik': 'Male', 'Vroulik': 'Female', 'Male': 'Male', 'Female': 'Female' }
-    const sexText = texts.find(t => sexMap[t])
-    const sex = sexText ? sexMap[sexText] : null
-    
-    animals.push({ animalIdent, earTag, sampleNo, sire, dam, sex })
+  for (let i = 0; i < sampleMatches.length; i++) {
+    const sampleNo = sampleMatches[i][0]
+    const start = sampleMatches[i].index
+    const end = (i + 1 < sampleMatches.length) ? sampleMatches[i + 1].index : fullText.length
+    const chunk = fullText.slice(start, end)
+
+    const idents = [...chunk.matchAll(identPattern)].map(m => m[0])
+    if (idents.length === 0) continue
+
+    const animalIdent = idents[0]
+    let dam = null, sire = null
+    const rest = idents.slice(1)
+    if (rest.length >= 2) { dam = rest[0]; sire = rest[1] }
+    else if (rest.length === 1) { sire = rest[0] }
+
+    animals.push({ sampleNo, animalIdent, dam, sire })
   }
-  
   return animals
 }
 
@@ -1152,8 +1104,8 @@ function BatchDetailImport({ batch, allCalves, onReload }) {
   async function parseReport(file) {
     setStatus('loading'); setMsg('Reading PDF...')
     try {
-      const items = await bdrExtractTextWithPositions(file)
-      const animals = parseBatchDetailReport(items)
+      const text = await bdrExtractText(file)
+      const animals = parseBatchDetailReport(text)
       if (animals.length === 0) {
         setMsg('No animal data found in PDF. The format may not be recognised — try the manual approach below.')
         setStatus('error'); return
@@ -1163,24 +1115,21 @@ function BatchDetailImport({ batch, allCalves, onReload }) {
       // Fetch cattle_register to match
       const { data: cattleData } = await supabase.from('cattle_register').select('id,ear_tag,identity_number,owner,mother_id,father_id,dna_sample_number')
       const cattle = cattleData || []
-      
-      // Build lookup maps
-      const byEarTag = {}, byIdent = {}
+
+      // Build lookup map by identity number (the Animal column identity, e.g. JWF25-2180)
+      const byIdent = {}
       cattle.forEach(c => {
-        if (c.ear_tag) byEarTag[c.ear_tag.trim()] = c
         if (c.identity_number) byIdent[c.identity_number.trim().toUpperCase()] = c
       })
-      // Also check calves (for newly created cattle not in register yet)
-      const byCalfEarTag = {}, byCalfIdent = {}
+      const byCalfIdent = {}
       allCalves.forEach(c => {
-        if (c.ear_tag) byCalfEarTag[c.ear_tag.trim()] = c
         if (c.identity_number) byCalfIdent[c.identity_number.trim().toUpperCase()] = c
       })
-      
+
       const matched = animals.map(a => {
         const identKey = a.animalIdent.toUpperCase()
-        const reg = byIdent[identKey] || byEarTag[a.earTag] || null
-        const calf = byCalfIdent[identKey] || byCalfEarTag[a.earTag] || null
+        const reg = byIdent[identKey] || null
+        const calf = byCalfIdent[identKey] || null
         
         const updates = {}
         if (reg) {
@@ -1269,7 +1218,6 @@ function BatchDetailImport({ batch, allCalves, onReload }) {
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <th style={{ textAlign: 'left', padding: '4px 8px 4px 0', color: 'var(--color-text-muted)', fontWeight: 500 }}>Identity No.</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px 4px 0', color: 'var(--color-text-muted)', fontWeight: 500 }}>Ear Tag</th>
                   <th style={{ textAlign: 'left', padding: '4px 8px 4px 0', color: 'var(--color-text-muted)', fontWeight: 500 }}>DNA Sample</th>
                   <th style={{ textAlign: 'left', padding: '4px 8px 4px 0', color: 'var(--color-text-muted)', fontWeight: 500 }}>Sire</th>
                   <th style={{ textAlign: 'left', padding: '4px 8px 4px 0', color: 'var(--color-text-muted)', fontWeight: 500 }}>Dam</th>
@@ -1280,7 +1228,6 @@ function BatchDetailImport({ batch, allCalves, onReload }) {
                 {matches.map((m, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--color-border)', background: m.hasUpdates ? 'var(--color-success-bg,#f0fdf4)' : m.reg ? 'var(--color-surface)' : 'var(--color-warning-bg,#fffbeb)' }}>
                     <td style={{ padding: '4px 8px 4px 0', fontWeight: 500 }}>{m.parsed.animalIdent}</td>
-                    <td style={{ padding: '4px 8px 4px 0' }}>{m.parsed.earTag}</td>
                     <td style={{ padding: '4px 8px 4px 0' }}>{m.parsed.sampleNo || <span className="faint">—</span>}</td>
                     <td style={{ padding: '4px 8px 4px 0' }}>{m.parsed.sire || <span className="faint">—</span>}</td>
                     <td style={{ padding: '4px 8px 4px 0' }}>{m.parsed.dam || <span className="faint">—</span>}</td>
