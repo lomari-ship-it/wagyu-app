@@ -1113,7 +1113,7 @@ function BatchDetailImport({ batch, allCalves, onReload }) {
       setParsed(animals)
       
       // Fetch cattle_register to match
-      const { data: cattleData } = await supabase.from('cattle_register').select('id,ear_tag,identity_number,owner,mother_id,father_id,dna_sample_number')
+      const { data: cattleData } = await supabase.from('cattle_register').select('id,ear_tag,identity_number,owner,mother_id,father_id,dna_sample_number,dna_verified')
       const cattle = cattleData || []
 
       // Build lookup map by identity number (the Animal column identity, e.g. JWF25-2180)
@@ -1136,6 +1136,9 @@ function BatchDetailImport({ batch, allCalves, onReload }) {
           if (a.sampleNo && reg.dna_sample_number !== a.sampleNo) updates.dna_sample_number = a.sampleNo
           if (a.dam && reg.mother_id !== a.dam) updates.mother_id = a.dam
           if (a.sire && reg.father_id !== a.sire) updates.father_id = a.sire
+          // Mark this record as DNA-verified so the Cattle Register Sync (which pulls from
+          // birth notifications) won't overwrite parentage/identity confirmed by lab results.
+          if ((updates.mother_id || updates.father_id || updates.dna_sample_number) && !reg.dna_verified) updates.dna_verified = true
         }
         
         return { parsed: a, reg, calf, hasUpdates: Object.keys(updates).length > 0, updates }
