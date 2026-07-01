@@ -10,6 +10,9 @@ const COLORS = [
   '10 - Brown', '11 - Grey', '12 - Gir', '13 - Guzerat', '14 - Indu Bra.', '15 - Nellore',
 ]
 
+// Matches identity numbers like "26-0001JFW" or "2026-0001JFW" — any digit-length year prefix.
+const IDENTITY_RE = /^(\d+)-(.*)JFW$/
+
 export default function CalfRegistration({ search, onSearchChange }) {
   const emptyForm = {
     owner: '', breed: 'Wagyu', ear_tag: '', identity_mid: '', birth_date: '',
@@ -67,17 +70,25 @@ export default function CalfRegistration({ search, onSearchChange }) {
   function startEdit(calf) {
     setEditingId(calf.id)
     setEditError(null)
-    const idYear2 = new Date().getFullYear()
-    let mid = ''
-    if (calf.identity_number) {
-      const m = calf.identity_number.match(/^\d{4}-(.*?)JFW$/)
-      if (m) mid = m[1]
-    }
+
+    // Parse the existing identity number so we can preserve its year prefix and
+    // fall back to the verbatim string if it doesn't match the expected shape,
+    // instead of silently discarding data on save.
+    const raw = calf.identity_number || ''
+    const m = raw.match(IDENTITY_RE)
+    const matched = !!m
+    const identityYear = matched
+      ? m[1]
+      : (calf.birth_date ? calf.birth_date.slice(2, 4) : new Date().getFullYear().toString().slice(2))
+
     setEditForm({
       owner: calf.owner || '',
       breed: calf.breed || 'Wagyu',
       ear_tag: calf.ear_tag || '',
-      identity_mid: mid,
+      identity_mid: matched ? m[2] : '',
+      identity_year: identityYear,
+      identity_matched: matched,
+      identity_raw: raw,
       birth_date: calf.birth_date || '',
       color: calf.color || '',
       sex: calf.sex || '',
@@ -94,9 +105,20 @@ export default function CalfRegistration({ search, onSearchChange }) {
   async function saveEdit(calf) {
     setEditSaving(true)
     setEditError(null)
-    const idYear2 = new Date().getFullYear()
-    const mid = editForm.identity_mid.trim()
-    const identityNumber = mid ? `${idYear2}-${mid}JFW` : null
+
+    const mid = (editForm.identity_mid || '').trim()
+    let identityNumber
+    if (editForm.identity_matched) {
+      // We successfully parsed the original number — reuse its preserved year
+      // rather than regenerating from today's date, and allow clearing it by
+      // emptying the mid field.
+      identityNumber = mid ? `${editForm.identity_year}-${mid}JFW` : null
+    } else {
+      // Original number didn't match the expected format (or there wasn't one).
+      // Don't touch it — keep the verbatim original rather than wiping it to null.
+      identityNumber = editForm.identity_raw || null
+    }
+
     const { error } = await supabase.from('calves').update({
       owner: editForm.owner, breed: editForm.breed, ear_tag: editForm.ear_tag,
       identity_number: identityNumber, birth_date: editForm.birth_date,
@@ -179,7 +201,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
     )
   })
 
-  
+  function updateEditField(field, value) { setEditForm(f => ({ ...f, [field]: value })) }
 
   return (
     <div className="stack">
@@ -234,21 +256,7 @@ export default function CalfRegistration({ search, onSearchChange }) {
                 <label>Color *</label>
                 <select required value={form.color} onChange={(e) => update('color', e.target.value)}>
                   <option value="">Select color</option>
-                  <option value="1 - Red">1 - Red</option>
-                  <option value="2 - Red and white">2 - Red and white</option>
-                  <option value="3 - White and red">3 - White and red</option>
-                  <option value="4 - Yellow">4 - Yellow</option>
-                  <option value="5 - Roan">5 - Roan</option>
-                  <option value="6 - White">6 - White</option>
-                  <option value="7 - Red with white on underline">7 - Red with white on underline</option>
-                  <option value="8 - Yellow and white">8 - Yellow and white</option>
-                  <option value="9 - Black">9 - Black</option>
-                  <option value="10 - Brown">10 - Brown</option>
-                  <option value="11 - Grey">11 - Grey</option>
-                  <option value="12 - Gir">12 - Gir</option>
-                  <option value="13 - Guzerat">13 - Guzerat</option>
-                  <option value="14 - Indu Bra.">14 - Indu Bra.</option>
-                  <option value="15 - Nellore">15 - Nellore</option>
+                  {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div style={{ gridColumn: 'span 3' }}>
@@ -323,152 +331,166 @@ export default function CalfRegistration({ search, onSearchChange }) {
       {loading
         ? <p className="muted">Loading…</p>
         : filtered.length === 0
-          ? <p className="muted">No calves found.</p>
-          : filtered.map(c => <CalfCard key={c.id} calf={c} />)
+        ? <p className="muted">No calves found.</p>
+        : filtered.map(c => (
+            <CalfCard
+              key={c.id}
+              calf={c}
+              editingId={editingId}
+              editForm={editForm}
+              editSaving={editSaving}
+              editError={editError}
+              onEdit={startEdit}
+              onDelete={deleteCalf}
+              onFieldChange={updateEditField}
+              onSave={saveEdit}
+              onCancel={() => setEditingId(null)}
+            />
+          ))
       }
     </div>
   )
 }
 
-function EditCalfCard({ calf }) {
-    const f = editForm
-    const idYear = f.birth_date ? f.birth_date.slice(2, 4) : new Date().getFullYear().toString().slice(2)
-    function set(field, value) { setEditForm(prev => ({ ...prev, [field]: value })) }
-    return (
-      <div className="card" style={{ border: '2px solid var(--color-primary)', padding: '16px 20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px 16px' }}>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Owner</label>
-            <select value={f.owner} onChange={(e) => set('owner', e.target.value)}>
-              <option value="">Select owner</option>
-              {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Breed</label>
-            <select value={f.breed} onChange={(e) => set('breed', e.target.value)}>
-              {BREEDS.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Color</label>
-            <select value={f.color} onChange={(e) => set('color', e.target.value)}>
-              <option value="">Select color</option>
-              <option value="1 - Red">1 - Red</option>
-              <option value="2 - Red and white">2 - Red and white</option>
-              <option value="3 - White and red">3 - White and red</option>
-              <option value="4 - Yellow">4 - Yellow</option>
-              <option value="5 - Roan">5 - Roan</option>
-              <option value="6 - White">6 - White</option>
-              <option value="7 - Red with white on underline">7 - Red with white on underline</option>
-              <option value="8 - Yellow and white">8 - Yellow and white</option>
-              <option value="9 - Black">9 - Black</option>
-              <option value="10 - Brown">10 - Brown</option>
-              <option value="11 - Grey">11 - Grey</option>
-              <option value="12 - Gir">12 - Gir</option>
-              <option value="13 - Guzerat">13 - Guzerat</option>
-              <option value="14 - Indu Bra.">14 - Indu Bra.</option>
-              <option value="15 - Nellore">15 - Nellore</option>
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Birth date</label>
-            <input type="date" value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Ear tag</label>
-            <input value={f.ear_tag} onChange={(e) => set('ear_tag', e.target.value)} />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Identity number</label>
+function EditCalfCard({ calf, editForm, editSaving, editError, onFieldChange, onSave, onCancel }) {
+  const f = editForm
+  return (
+    <div className="card" style={{ border: '2px solid var(--color-primary)', padding: '16px 20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px 16px' }}>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Owner</label>
+          <select value={f.owner} onChange={(e) => onFieldChange('owner', e.target.value)}>
+            <option value="">Select owner</option>
+            {OWNERS.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Breed</label>
+          <select value={f.breed} onChange={(e) => onFieldChange('breed', e.target.value)}>
+            {BREEDS.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Color</label>
+          <select value={f.color} onChange={(e) => onFieldChange('color', e.target.value)}>
+            <option value="">Select color</option>
+            {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Birth date</label>
+          <input type="date" value={f.birth_date} onChange={(e) => onFieldChange('birth_date', e.target.value)} />
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label>Ear tag</label>
+          <input value={f.ear_tag} onChange={(e) => onFieldChange('ear_tag', e.target.value)} />
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label>Identity number</label>
+          {f.identity_matched ? (
             <div className="row" style={{ gap: 4 }}>
-              <span className="muted" style={{ whiteSpace: 'nowrap' }}>{idYear}-</span>
-              <input value={f.identity_mid} onChange={(e) => set('identity_mid', e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+              <span className="muted" style={{ whiteSpace: 'nowrap' }}>{f.identity_year}-</span>
+              <input value={f.identity_mid} onChange={(e) => onFieldChange('identity_mid', e.target.value)} style={{ flex: 1, minWidth: 0 }} />
               <span className="muted" style={{ whiteSpace: 'nowrap' }}>JFW</span>
             </div>
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Namlits Ownership</label>
-            <select value={f.namlits_ownership || 'Karahari Wagyu'} onChange={(e) => set('namlits_ownership', e.target.value)}>
-              {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Sex</label>
-            <select value={f.sex} onChange={(e) => set('sex', e.target.value)}>
-              <option value="">Select</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Calf details</label>
-            <select value={f.calf_details} onChange={(e) => set('calf_details', e.target.value)}>
-              <option value="Single">Single</option>
-              <option value="Twin A">Twin A</option>
-              <option value="Twin B">Twin B</option>
-              <option value="Triplet A">Triplet A</option>
-              <option value="Triplet B">Triplet B</option>
-              <option value="Triplet C">Triplet C</option>
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Birth mass (kg)</label>
-            <input type="number" value={f.birth_mass} onChange={(e) => set('birth_mass', e.target.value)} step="0.1" />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Mother ID</label>
-            <input value={f.mother_id} onChange={(e) => set('mother_id', e.target.value)} placeholder="Ear tag or identity no." />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Father ID</label>
-            <input value={f.father_id} onChange={(e) => set('father_id', e.target.value)} placeholder="Ear tag or identity no." />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label>Sold / transferred date</label>
-            <input type="date" value={f.sold_date || ''} onChange={(e) => set('sold_date', e.target.value)} />
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label>Notes</label>
-            <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical' }} />
-          </div>
+          ) : (
+            <input value={f.identity_raw || ''} readOnly title="Unrecognized format — kept as-is" style={{ opacity: 0.7 }} />
+          )}
         </div>
-        {editError && <p style={{ color: 'var(--color-danger)', margin: '8px 0 0' }}>{editError}</p>}
-        <div className="row" style={{ marginTop: 12, gap: 8 }}>
-          <button className="primary" onClick={() => saveEdit(calf)} disabled={editSaving}>
-            {editSaving ? 'Saving…' : 'Save changes'}
-          </button>
-          <button onClick={() => setEditingId(null)}>Cancel</button>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label>Namlits Ownership</label>
+          <select value={f.namlits_ownership || 'Karahari Wagyu'} onChange={(e) => onFieldChange('namlits_ownership', e.target.value)}>
+            {NAMLITS_OWNERS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label>Sex</label>
+          <select value={f.sex} onChange={(e) => onFieldChange('sex', e.target.value)}>
+            <option value="">Select</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label>Calf details</label>
+          <select value={f.calf_details} onChange={(e) => onFieldChange('calf_details', e.target.value)}>
+            <option value="Single">Single</option>
+            <option value="Twin A">Twin A</option>
+            <option value="Twin B">Twin B</option>
+            <option value="Triplet A">Triplet A</option>
+            <option value="Triplet B">Triplet B</option>
+            <option value="Triplet C">Triplet C</option>
+          </select>
+        </div>
+        <div style={{ gridColumn: 'span 2' }}>
+          <label>Birth mass (kg)</label>
+          <input type="number" value={f.birth_mass} onChange={(e) => onFieldChange('birth_mass', e.target.value)} step="0.1" />
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Mother ID</label>
+          <input value={f.mother_id} onChange={(e) => onFieldChange('mother_id', e.target.value)} placeholder="Ear tag or identity no." />
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Father ID</label>
+          <input value={f.father_id} onChange={(e) => onFieldChange('father_id', e.target.value)} placeholder="Ear tag or identity no." />
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <label>Sold / transferred date</label>
+          <input type="date" value={f.sold_date || ''} onChange={(e) => onFieldChange('sold_date', e.target.value)} />
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label>Notes</label>
+          <textarea value={f.notes} onChange={(e) => onFieldChange('notes', e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical' }} />
         </div>
       </div>
-    )
-  }
+      {editError && <p style={{ color: 'var(--color-danger)', margin: '8px 0 0' }}>{editError}</p>}
+      <div className="row" style={{ marginTop: 12, gap: 8 }}>
+        <button className="primary" onClick={onSave} disabled={editSaving}>
+          {editSaving ? 'Saving…' : 'Save changes'}
+        </button>
+        <button onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  )
+}
 
-  function CalfCard({ calf }) {
-    if (editingId === calf.id) return <EditCalfCard calf={calf} />
+function CalfCard({ calf, editingId, editForm, editSaving, editError, onEdit, onDelete, onFieldChange, onSave, onCancel }) {
+  if (editingId === calf.id) {
     return (
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-          <div>
-            <div style={{ fontWeight: 500 }}>
-              {calf.ear_tag}
-              {calf.identity_number && <span className="muted" style={{ marginLeft: 8, fontSize: 13 }}>{calf.identity_number}</span>}
-            </div>
-            <div className="muted">
-              {calf.owner} &middot; Born {formatDate(calf.birth_date)} &middot; {calf.color}
-              {calf.namlits_ownership && ` · ${calf.namlits_ownership}`}
-              {calf.sex && ` · ${calf.sex}`}
-              {calf.calf_details && calf.calf_details !== 'Single' && ` · ${calf.calf_details}`}
-              {calf.birth_mass && ` · ${calf.birth_mass}kg`}
-            </div>
-          </div>
-          <div className="row" style={{ gap: 6, flexShrink: 0 }}>
-            {calf.sold_flag && <span className="badge neutral">Sold/Transferred{calf.sold_date ? ` · ${formatDate(calf.sold_date)}` : ''}</span>}
-            <button style={{ fontSize: 12 }} onClick={() => startEdit(calf)}>Edit</button>
-            <button className="danger-text" style={{ fontSize: 12 }} onClick={() => deleteCalf(calf.id)}>Delete</button>
-          </div>
-        </div>
-        {calf.notes && <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>{calf.notes}</p>}
-      </div>
+      <EditCalfCard
+        calf={calf}
+        editForm={editForm}
+        editSaving={editSaving}
+        editError={editError}
+        onFieldChange={onFieldChange}
+        onSave={() => onSave(calf)}
+        onCancel={onCancel}
+      />
     )
   }
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={{ fontWeight: 500 }}>
+            {calf.ear_tag}
+            {calf.identity_number && <span className="muted" style={{ marginLeft: 8, fontSize: 13 }}>{calf.identity_number}</span>}
+          </div>
+          <div className="muted">
+            {calf.owner} &middot; Born {formatDate(calf.birth_date)} &middot; {calf.color}
+            {calf.namlits_ownership && ` · ${calf.namlits_ownership}`}
+            {calf.sex && ` · ${calf.sex}`}
+            {calf.calf_details && calf.calf_details !== 'Single' && ` · ${calf.calf_details}`}
+            {calf.birth_mass && ` · ${calf.birth_mass}kg`}
+          </div>
+        </div>
+        <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+          {calf.sold_flag && <span className="badge neutral">Sold/Transferred{calf.sold_date ? ` · ${formatDate(calf.sold_date)}` : ''}</span>}
+          <button style={{ fontSize: 12 }} onClick={() => onEdit(calf)}>Edit</button>
+          <button className="danger-text" style={{ fontSize: 12 }} onClick={() => onDelete(calf.id)}>Delete</button>
+        </div>
+      </div>
+      {calf.notes && <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>{calf.notes}</p>}
+    </div>
+  )
+}
